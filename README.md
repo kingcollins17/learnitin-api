@@ -1,216 +1,304 @@
-# LearnItIn API
+# LearnItIn API - Feature-First Architecture
 
-A modern FastAPI backend for the LearnItIn educational platform with JWT authentication, SQLAlchemy ORM, and LangChain integration.
+A FastAPI application with feature-first (vertical slice) architecture, SQLModel ORM, and async MySQL support.
 
-## Features
+## 🏗️ Architecture Overview
 
-- ⚡ **FastAPI** - High-performance async Python web framework
-- 🔐 **JWT Authentication** - Secure token-based authentication
-- 💾 **SQLAlchemy ORM** - Database abstraction and management
-- 🤖 **LangChain Integration** - AI-powered educational features
-- 📝 **OpenAPI Documentation** - Auto-generated API docs
-- 🔒 **Security** - Password hashing with bcrypt
-- 🌍 **CORS Enabled** - Cross-origin resource sharing configured
-- 📦 **Virtual Environment** - Isolated Python dependencies
+This project follows a **feature-first architecture** where each feature is self-contained with its own models, schemas, services, repositories, and routes.
 
-## Project Structure
+### Project Structure
 
 ```
-learnitin-api/
-├── app/
-│   ├── api/
-│   │   └── v1/
-│   │       ├── auth.py          # Authentication endpoints
-│   │       └── users.py         # User management endpoints
-│   ├── core/
-│   │   ├── config.py            # Application configuration
-│   │   ├── security.py          # JWT and password utilities
-│   │   └── deps.py              # FastAPI dependencies
-│   ├── db/
-│   │   ├── session.py           # Database session management
-│   │   └── init_db.py           # Database initialization
-│   ├── models/
-│   │   └── user.py              # SQLAlchemy models
-│   ├── schemas/
-│   │   ├── user.py              # User Pydantic schemas
-│   │   └── auth.py              # Auth Pydantic schemas
-│   ├── services/
-│   │   └── langchain_service.py # LangChain AI services
-│   └── main.py                  # Application entry point
-├── tests/                       # Test directory
-├── docs/                        # Documentation
-├── venv/                        # Virtual environment
-├── .env                         # Environment variables (create from .env.example)
-├── .env.example                 # Environment template
-├── .gitignore                   # Git ignore rules
-├── requirements.txt             # Python dependencies
-└── README.md                    # This file
+app/
+├── common/                    # Shared utilities and configuration
+│   ├── config.py             # Application settings
+│   ├── security.py           # Authentication & password hashing
+│   ├── deps.py               # Common FastAPI dependencies
+│   └── database/
+│       ├── base.py           # SQLModel base configuration
+│       ├── session.py        # Async database session management
+│       └── init_db.py        # Database initialization
+│
+├── features/                  # Feature modules (vertical slices)
+│   ├── auth/                 # Authentication feature
+│   │   ├── models.py         # Auth-specific models (if any)
+│   │   ├── schemas.py        # Request/response schemas
+│   │   ├── service.py        # Business logic
+│   │   └── router.py         # API endpoints
+│   │
+│   └── users/                # User management feature
+│       ├── models.py         # User database model
+│       ├── schemas.py        # User schemas
+│       ├── repository.py     # Database operations
+│       ├── service.py        # Business logic
+│       └── router.py         # User endpoints
+│
+└── main.py                    # Application entry point
 ```
 
-## Getting Started
+## 🚀 Getting Started
 
 ### Prerequisites
 
-- Python 3.9+
-- pip
-- virtualenv (or python3-venv)
+- Python 3.10+
+- MySQL 8.0+
+- pip or poetry
 
 ### Installation
 
-1. **Navigate to the project directory:**
-```bash
-cd learnitin-api
-```
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd learnitin-api
+   ```
 
-2. **Activate the virtual environment:**
-```bash
-source venv/bin/activate  # On macOS/Linux
-# or
-venv\Scripts\activate  # On Windows
-```
+2. **Create virtual environment**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
 
-3. **Create environment file:**
-```bash
-cp .env.example .env
-```
+3. **Install dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-4. **Edit `.env` file and add your configurations:**
-- Set a strong `SECRET_KEY`
-- Add your `OPENAI_API_KEY` for LangChain features
-- Configure database URL if not using SQLite
+4. **Set up MySQL database**
+   ```bash
+   # Create database
+   mysql -u root -p
+   CREATE DATABASE learnitin_db;
+   exit;
+   ```
 
-5. **Initialize the database:**
-```bash
-python -m app.db.init_db
-```
+5. **Configure environment variables**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your MySQL credentials
+   ```
 
-6. **Run the development server:**
-```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
+   Required environment variables:
+   ```env
+   DB_HOST=localhost
+   DB_PORT=3306
+   DB_USER=root
+   DB_PASSWORD=your-password
+   DB_NAME=learnitin_db
+   SECRET_KEY=your-secret-key-here
+   ```
 
-The API will be available at `http://localhost:8000`
+6. **Run the application**
+   ```bash
+   uvicorn app.main:app --reload
+   ```
 
-## API Documentation
+   The API will be available at `http://localhost:8000`
+   - API Documentation: `http://localhost:8000/docs`
+   - Alternative docs: `http://localhost:8000/redoc`
 
-Once the server is running, access the interactive API documentation:
+## 📚 Feature-First Architecture
 
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
+### What is Feature-First Architecture?
 
-## API Endpoints
+Instead of organizing code by technical layers (models, views, controllers), we organize by **business features**. Each feature is a vertical slice containing everything needed for that functionality.
 
-### Authentication
-- `POST /api/v1/auth/register` - Register a new user
-- `POST /api/v1/auth/login` - Login and get access token
+### Benefits
 
-### Users
-- `GET /api/v1/users/me` - Get current user info (requires auth)
-- `GET /api/v1/users/{user_id}` - Get user by ID (requires auth)
+- **Easier to navigate**: Related code is co-located
+- **Better scalability**: Features can be developed independently
+- **Clearer boundaries**: Each feature has well-defined responsibilities
+- **Simpler testing**: Test entire features in isolation
 
-### Health Check
-- `GET /` - Root endpoint with API info
-- `GET /health` - Health check endpoint
+### Adding a New Feature
 
-## Authentication Flow
+To add a new feature (e.g., "courses"):
 
-1. **Register a new user:**
-```bash
-curl -X POST "http://localhost:8000/api/v1/auth/register" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "username": "testuser",
-    "password": "securepassword123",
-    "full_name": "Test User"
-  }'
-```
+1. **Create feature directory**
+   ```bash
+   mkdir -p app/features/courses
+   touch app/features/courses/__init__.py
+   ```
 
-2. **Login to get access token:**
-```bash
-curl -X POST "http://localhost:8000/api/v1/auth/login" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "username=testuser&password=securepassword123"
-```
+2. **Create models** (`models.py`)
+   ```python
+   from sqlmodel import Field, SQLModel
+   
+   class Course(SQLModel, table=True):
+       __tablename__ = "courses"
+       id: int | None = Field(default=None, primary_key=True)
+       title: str
+       description: str
+   ```
 
-3. **Use the token in subsequent requests:**
-```bash
-curl -X GET "http://localhost:8000/api/v1/users/me" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
+3. **Create schemas** (`schemas.py`)
+   ```python
+   from pydantic import BaseModel
+   
+   class CourseCreate(BaseModel):
+       title: str
+       description: str
+   
+   class CourseResponse(BaseModel):
+       id: int
+       title: str
+       description: str
+   ```
 
-## Development
+4. **Create repository** (`repository.py`)
+   ```python
+   from sqlalchemy.ext.asyncio import AsyncSession
+   from sqlmodel import select
+   from .models import Course
+   
+   class CourseRepository:
+       def __init__(self, session: AsyncSession):
+           self.session = session
+       
+       async def create(self, course: Course) -> Course:
+           self.session.add(course)
+           await self.session.flush()
+           await self.session.refresh(course)
+           return course
+   ```
 
-### Running Tests
-```bash
-pytest tests/
-```
+5. **Create service** (`service.py`)
+   ```python
+   from sqlalchemy.ext.asyncio import AsyncSession
+   from .repository import CourseRepository
+   from .schemas import CourseCreate
+   from .models import Course
+   
+   class CourseService:
+       def __init__(self, session: AsyncSession):
+           self.repository = CourseRepository(session)
+       
+       async def create_course(self, data: CourseCreate) -> Course:
+           course = Course(**data.model_dump())
+           return await self.repository.create(course)
+   ```
 
-### Code Formatting
-```bash
-black app/
-```
+6. **Create router** (`router.py`)
+   ```python
+   from fastapi import APIRouter, Depends
+   from sqlalchemy.ext.asyncio import AsyncSession
+   from app.common.database.session import get_async_session
+   from .service import CourseService
+   from .schemas import CourseCreate, CourseResponse
+   
+   router = APIRouter()
+   
+   @router.post("/", response_model=CourseResponse)
+   async def create_course(
+       data: CourseCreate,
+       session: AsyncSession = Depends(get_async_session)
+   ):
+       service = CourseService(session)
+       return await service.create_course(data)
+   ```
 
-### Type Checking
-```bash
-mypy app/
-```
+7. **Register router in main.py**
+   ```python
+   from app.features.courses.router import router as courses_router
+   
+   app.include_router(
+       courses_router,
+       prefix=f"{settings.API_V1_PREFIX}/courses",
+       tags=["Courses"]
+   )
+   ```
 
-## Environment Variables
+8. **Import model in session.py** (for table creation)
+   ```python
+   # In app/common/database/session.py, add to init_db():
+   from app.features.courses.models import Course  # noqa: F401
+   ```
 
-See `.env.example` for all available configuration options:
+## 🗄️ Database
 
-- `APP_NAME` - Application name
-- `APP_VERSION` - Application version
-- `DEBUG` - Debug mode (True/False)
-- `SECRET_KEY` - JWT secret key
-- `DATABASE_URL` - Database connection string
-- `OPENAI_API_KEY` - OpenAI API key for LangChain
-- `ACCESS_TOKEN_EXPIRE_MINUTES` - JWT token expiration time
+### SQLModel + Async MySQL
 
-## LangChain Integration
+This project uses:
+- **SQLModel**: Combines SQLAlchemy and Pydantic for type-safe ORM
+- **asyncmy**: Async MySQL driver for non-blocking database operations
+- **AsyncSession**: Async database sessions for better performance
 
-The project includes a `LangChainService` for AI-powered features:
+### Database Session Management
+
+Sessions are managed automatically via dependency injection:
 
 ```python
-from app.services.langchain_service import langchain_service
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.common.database.session import get_async_session
 
-# Generate educational content
-response = await langchain_service.generate_response(
-    prompt="Explain Python decorators",
-    context="Beginner level"
-)
-
-# Create learning plans
-plan = await langchain_service.create_learning_plan(
-    topic="Python",
-    level="intermediate"
-)
+@router.get("/")
+async def my_endpoint(session: AsyncSession = Depends(get_async_session)):
+    # Session is automatically created, committed, and closed
+    result = await session.execute(select(User))
+    return result.scalars().all()
 ```
 
-## Security Notes
+### Migrations
 
-⚠️ **Important Security Reminders:**
+For production, consider using Alembic for database migrations:
 
-1. Always use a strong, unique `SECRET_KEY` in production
-2. Never commit `.env` file to version control
-3. Use HTTPS in production
-4. Regularly update dependencies
-5. Use environment-specific configurations
-6. Implement rate limiting for production
-7. Keep OpenAI API keys secure
+```bash
+pip install alembic
+alembic init alembic
+# Configure alembic.ini and env.py
+alembic revision --autogenerate -m "Initial migration"
+alembic upgrade head
+```
 
-## Contributing
+## 🔐 Authentication
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+The API uses JWT (JSON Web Tokens) for authentication:
 
-## License
+1. **Register**: `POST /api/v1/auth/register`
+2. **Login**: `POST /api/v1/auth/login` (returns access token)
+3. **Use token**: Include in `Authorization: Bearer <token>` header
 
-This project is licensed under the MIT License.
+Protected endpoints use the `get_current_user` or `get_current_active_user` dependency.
 
-## Support
+## 🧪 Testing
 
-For issues and questions, please open an issue on the repository.
+```bash
+# Install test dependencies
+pip install pytest pytest-asyncio httpx
+
+# Run tests
+pytest
+```
+
+## 📝 API Documentation
+
+Once running, visit:
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
+
+## 🔧 Development
+
+### Code Style
+
+- Use `black` for formatting
+- Use `ruff` for linting
+- Type hints are required
+
+### Environment Variables
+
+See `.env.example` for all available configuration options.
+
+## 📦 Deployment
+
+1. Set `DEBUG=False` in production
+2. Use a strong `SECRET_KEY`
+3. Configure proper CORS origins
+4. Use environment-specific database credentials
+5. Consider using a process manager like `gunicorn` with `uvicorn` workers:
+
+```bash
+gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker
+```
+
+## 📄 License
+
+[Your License Here]

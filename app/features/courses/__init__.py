@@ -1,0 +1,1 @@
+"""Course feature module."""
