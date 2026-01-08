@@ -70,6 +70,8 @@ class CourseRepository:
         limit: int = 100,
         is_public: Optional[bool] = None,
         level: Optional[str] = None,
+        category_id: Optional[int] = None,
+        sub_category_id: Optional[int] = None,
         min_enrollees: Optional[int] = None,
     ) -> List[Course]:
         """Get all courses with pagination and optional filters."""
@@ -84,6 +86,12 @@ class CourseRepository:
 
         if min_enrollees is not None:
             query = query.where(Course.total_enrollees >= min_enrollees)
+
+        if category_id is not None:
+            query = query.where(Course.category_id == category_id)
+
+        if sub_category_id is not None:
+            query = query.where(Course.sub_category_id == sub_category_id)
 
         # Apply pagination
         query = query.offset(skip).limit(limit)
@@ -171,4 +179,122 @@ class UserCourseRepository:
     async def delete(self, user_course: UserCourse) -> None:
         """Delete a user course record."""
         await self.session.delete(user_course)
+        await self.session.flush()
+
+
+class CategoryRepository:
+    """Repository for category database operations."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get_all(self, skip: int = 0, limit: int = 100) -> List["Category"]:
+        """Get all categories."""
+        from app.features.courses.models import Category
+
+        result = await self.session.execute(select(Category).offset(skip).limit(limit))
+        return list(result.scalars().all())
+
+    async def get_by_id(self, category_id: int) -> Optional["Category"]:
+        """Get category by ID."""
+        from app.features.courses.models import Category
+
+        result = await self.session.execute(
+            select(Category).where(Category.id == category_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_name(self, name: str) -> Optional["Category"]:
+        """Get category by name."""
+        from app.features.courses.models import Category
+
+        result = await self.session.execute(
+            select(Category).where(Category.name == name)
+        )
+        return result.scalar_one_or_none()
+
+    async def create(self, category: "Category") -> "Category":
+        """Create a new category."""
+        self.session.add(category)
+        await self.session.flush()
+        await self.session.refresh(category)
+        return category
+
+    async def update(self, category: "Category") -> "Category":
+        """Update an existing category."""
+        self.session.add(category)
+        await self.session.flush()
+        await self.session.refresh(category)
+        return category
+
+    async def delete(self, category: "Category") -> None:
+        """Delete a category."""
+        await self.session.delete(category)
+        await self.session.flush()
+
+
+class SubCategoryRepository:
+    """Repository for sub-category database operations."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get_all(self, skip: int = 0, limit: int = 100) -> List["SubCategory"]:
+        """Get all sub-categories."""
+        from app.features.courses.models import SubCategory
+
+        result = await self.session.execute(
+            select(SubCategory).offset(skip).limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def get_by_id(self, sub_category_id: int) -> Optional["SubCategory"]:
+        """Get sub-category by ID."""
+        from app.features.courses.models import SubCategory
+
+        result = await self.session.execute(
+            select(SubCategory).where(SubCategory.id == sub_category_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_category_id(
+        self, category_id: int, skip: int = 0, limit: int = 100
+    ) -> List["SubCategory"]:
+        """Get sub-categories by category ID."""
+        from app.features.courses.models import SubCategory
+
+        result = await self.session.execute(
+            select(SubCategory)
+            .where(SubCategory.category_id == category_id)
+            .offset(skip)
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def get_by_name(self, name: str) -> Optional["SubCategory"]:
+        """Get sub-category by name."""
+        from app.features.courses.models import SubCategory
+
+        result = await self.session.execute(
+            select(SubCategory).where(SubCategory.name == name)
+        )
+        return result.scalar_one_or_none()
+
+    async def create(self, sub_category: "SubCategory") -> "SubCategory":
+        """Create a new sub-category."""
+        self.session.add(sub_category)
+        await self.session.flush()
+        await self.session.refresh(sub_category)
+        return sub_category
+
+    async def update(self, sub_category: "SubCategory") -> "SubCategory":
+        """Update an existing sub-category."""
+        self.session.add(sub_category)
+        await self.session.flush()
+        await self.session.refresh(sub_category)
+        return sub_category
+
+    async def delete(self, sub_category: "SubCategory") -> None:
+        """Delete a sub-category."""
+        await self.session.delete(sub_category)
         await self.session.flush()

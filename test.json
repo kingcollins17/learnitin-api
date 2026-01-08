@@ -1,0 +1,233 @@
+{
+      "title": "Calculus for AI & Machine Learning: Foundations to Advanced Applications",
+      "description": "This comprehensive 4-week course is designed for aspiring AI and Machine Learning Engineers with no prior calculus background, quickly building foundational knowledge and progressing to advanced concepts crucial for understanding and developing machine learning algorithms. You'll master differential and integral calculus, with a strong focus on multivariable calculus, optimization, and real-world applications in AI/ML.",
+      "duration": "4 Weeks (Approximately 40-50 hours of content)",
+      "outline": [
+        {
+          "title": "Module 1: Pre-Calculus Essentials & Introduction to Limits",
+          "description": "Establish a strong mathematical foundation, reviewing essential concepts and introducing the fundamental concept of limits, which underpins all of calculus.",
+          "duration": "1 Week (10-12 hours)",
+          "lessons": [
+            {
+              "title": "Functions, Graphs, and Essential Algebra Review",
+              "objectives": [
+                "Review core algebraic concepts including solving equations and inequalities.",
+                "Understand functions, their domains, ranges, and various types of graphs.",
+                "Practice manipulating functions including composition and inverse functions."
+              ],
+              "duration": "2 hours",
+              "credit_cost": 0
+            },
+            {
+              "title": "Understanding Limits Intuitively and Algebraically",
+              "objectives": [
+                "Define limits intuitively and understand their role in calculus.",
+                "Evaluate limits using algebraic techniques, direct substitution, and factorization.",
+                "Identify one-sided limits and limits at infinity."
+              ],
+              "duration": "2.5 hours",
+              "credit_cost": 0
+            },
+            {
+              "title": "Continuity and Discontinuity of Functions",
+              "objectives": [
+                "Define continuity and identify points of discontinuity.",
+                "Apply the definition of continuity to determine if a function is continuous at a point or on an interval.",
+                "Understand the Intermediate Value Theorem."
+              ],
+              "duration": "2 hours",
+              "credit_cost": 0
+            },
+            {
+              "title": "Introduction to Derivatives: Rates of Change and Tangent Lines",
+              "objectives": [
+                "Understand the geometric interpretation of a derivative as the slope of a tangent line.",
+                "Define the derivative as a limit of the difference quotient.",
+                "Calculate derivatives from first principles for simple functions."
+              ],
+              "duration": "2.5 hours",
+              "credit_cost": 3
+            }
+          ]
+        },
+        {
+          "title": "Module 2: Mastering Differential Calculus & Applications",
+          "description": "Dive deep into differentiation techniques, learning rules and applying them to solve practical problems such as optimization, crucial for understanding machine learning model training.",
+          "duration": "1 Week (10-12 hours)",
+          "lessons": [
+            {
+              "title": "Differentiation Rules: Power, Product, Quotient, and Chain Rule",
+              "objectives": [
+                "Master fundamental differentiation rules: Power, Constant Multiple, Sum, and Difference Rules.",
+                "Apply the Product and Quotient Rules to find derivatives of complex functions.",
+                "Utilize the Chain Rule for composite functions effectively."
+              ],
+              "duration": "2.5 hours",
+              "credit_cost": 4
+            },
+            {
+              "title": "Derivatives of Transcendental Functions (Exp, Log, Trig)",
+              "objectives": [
+                "Differentiate exponential and logarithmic functions.",
+                "Differentiate trigonometric functions (sine, cosine, tangent) and their inverses.",
+                "Apply the chain rule in conjunction with transcendental functions."
+              ],
+              "duration": "2 hours",
+              "credit_cost": 4
+            },
+            {
+              "title": "Implicit Differentiation and Related Rates",
+              "objectives": [
+                "Apply implicit differentiation to find derivatives of implicitly defined functions.",
+                "Solve related rates problems by setting up equations and differentiating with respect to time.",
+                "Understand practical scenarios where implicit differentiation is necessary."
+              ],
+              "duration": "2.5 hours",
+              "credit_cost": 5
+            },
+            {
+              "title": "Optimization Problems and Curve Sketching",
+              "objectives": [
+                "Identify critical points and use the first and second derivative tests to find local extrema.",
+                "Solve real-world optimization problems by setting up appropriate functions and finding their maximum or minimum values.",
+                "Analyze functions using derivatives to sketch accurate graphs."
+              ],
+              "duration": "3 hours",
+              "credit_cost": 6
+            }
+          ]
+        },
+        {
+          "title": "Module 3: Introduction to Integral Calculus",
+          "description": "Explore the inverse operation of differentiation – integration. Learn fundamental theorems and techniques for calculating areas and volumes, a core component for probability and statistics in ML.",
+          "duration": "1 Week (10-12 hours)",
+          "lessons": [
+            {
+              "title": "Antiderivatives and the Indefinite Integral",
+              "objectives": [
+                "Define antiderivatives and understand their relationship to derivatives.",
+                "Compute indefinite integrals using basic integration formulas.",
+                "Understand the constant of integration and its implications."
+              ],
+              "duration": "2 hours",
+              "credit_cost": 4
+            },
+            {
+              "title": "The Fundamental Theorem of Calculus",
+              "objectives": [
+                "State and apply both parts of the Fundamental Theorem of Calculus.",
+                "Understand the connection between differentiation and integration.",
+                "Evaluate definite integrals using antiderivatives."
+              ],
+              "duration": "2.5 hours",
+              "credit_cost": 5
+            },
+            {
+              "title": "Definite Integrals and Area Under the Curve",
+              "objectives": [
+                "Interpret definite integrals as the net signed area under a curve.",
+                "Calculate areas between curves using definite integrals.",
+                "Apply definite integrals to solve problems involving displacement and total distance."
+              ],
+              "duration": "2.5 hours",
+              "credit_cost": 5
+            },
+            {
+              "title": "Integration Techniques: Substitution",
+              "objectives": [
+                "Master the method of u-substitution for both indefinite and definite integrals.",
+                "Identify appropriate substitutions to simplify complex integrals.",
+                "Solve integrals requiring multiple substitution steps."
+              ],
+              "duration": "3 hours",
+              "credit_cost": 6
+            }
+          ]
+        },
+        {
+          "title": "Module 4: Essential Multivariable Calculus for ML",
+          "description": "Transition to functions of multiple variables, a critical skill for understanding and working with machine learning models. Learn about partial derivatives, gradients, and optimization techniques.",
+          "duration": "1 Week (10-12 hours)",
+          "lessons": [
+            {
+              "title": "Functions of Several Variables and Partial Derivatives",
+              "objectives": [
+                "Understand functions of multiple variables and their geometric interpretations.",
+                "Compute partial derivatives with respect to each independent variable.",
+                "Interpret partial derivatives as rates of change in specific directions."
+              ],
+              "duration": "2.5 hours",
+              "credit_cost": 7
+            },
+            {
+              "title": "The Gradient Vector and Directional Derivatives",
+              "objectives": [
+                "Calculate the gradient vector for scalar fields.",
+                "Understand the significance of the gradient in pointing to the direction of maximum increase.",
+                "Compute directional derivatives to find rates of change in arbitrary directions."
+              ],
+              "duration": "2.5 hours",
+              "credit_cost": 7
+            },
+            {
+              "title": "Hessians and the Jacobian Matrix",
+              "objectives": [
+                "Compute second-order partial derivatives and form the Hessian matrix.",
+                "Understand the role of the Hessian in multivariable optimization (concavity/convexity).",
+                "Construct and interpret the Jacobian matrix for vector-valued functions, relevant for backpropagation."
+              ],
+              "duration": "3 hours",
+              "credit_cost": 8
+            },
+            {
+              "title": "Constrained Optimization and Lagrange Multipliers",
+              "objectives": [
+                "Understand the concept of optimization with equality constraints.",
+                "Apply the method of Lagrange Multipliers to solve constrained optimization problems.",
+                "Recognize the application of constrained optimization in machine learning (e.g., SVMs)."
+              ],
+              "duration": "3 hours",
+              "credit_cost": 8
+            }
+          ]
+        },
+        {
+          "title": "Module 5: Calculus in AI/ML Context & Project",
+          "description": "Consolidate your calculus knowledge by exploring advanced topics and directly applying calculus to fundamental machine learning algorithms and concepts.",
+          "duration": "Variable (Tailored to project completion)",
+          "lessons": [
+            {
+              "title": "Taylor Series and Approximations",
+              "objectives": [
+                "Understand how Taylor series can approximate functions locally.",
+                "Compute Taylor polynomials and infinite Taylor series for various functions.",
+                "Recognize the importance of approximations in numerical methods and model understanding."
+              ],
+              "duration": "2 hours",
+              "credit_cost": 7
+            },
+            {
+              "title": "Gradient Descent Algorithm Explained",
+              "objectives": [
+                "Understand the core principle of gradient descent for minimizing objective functions.",
+                "Relate the gradient to the direction of steepest ascent/descent.",
+                "Walk through the steps of a gradient descent iteration mathematically."
+              ],
+              "duration": "2.5 hours",
+              "credit_cost": 9
+            },
+            {
+              "title": "Project: Implementing a Simple Gradient Descent",
+              "objectives": [
+                "Apply calculus concepts to implement a basic gradient descent algorithm from scratch.",
+                "Train a simple linear regression model using gradient descent.",
+                "Visualize the optimization process and the convergence of the algorithm."
+              ],
+              "duration": "5 hours",
+              "credit_cost": 10
+            }
+          ]
+        }
+      ]
+    }
+  

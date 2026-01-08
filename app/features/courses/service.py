@@ -8,12 +8,23 @@ from app.features.courses.schemas import (
     CourseOutline,
     CourseResponse,
 )
-from app.features.courses.models import Course, UserCourse, LearningPace, CourseLevel
+from app.features.courses.models import (
+    Course,
+    UserCourse,
+    LearningPace,
+    CourseLevel,
+    Category,
+    SubCategory,
+)
 from app.features.modules.models import Module
 from app.features.lessons.models import Lesson
 from app.features.modules.repository import ModuleRepository
 from app.features.lessons.repository import LessonRepository
-from app.features.courses.repository import UserCourseRepository
+from app.features.courses.repository import (
+    UserCourseRepository,
+    CategoryRepository,
+    SubCategoryRepository,
+)
 import json
 import re
 
@@ -132,6 +143,8 @@ class CourseService:
         per_page: int = 10,
         is_public: Optional[bool] = None,
         level: Optional[str] = None,
+        category_id: Optional[int] = None,
+        sub_category_id: Optional[int] = None,
         min_enrollees: Optional[int] = None,
     ) -> List[Course]:
         """
@@ -142,6 +155,8 @@ class CourseService:
             per_page: Number of items per page
             is_public: Filter by public/private courses
             level: Filter by course level
+            category_id: Filter by category ID
+            sub_category_id: Filter by sub-category ID
             min_enrollees: Filter by minimum number of enrollees
 
         Returns:
@@ -153,6 +168,8 @@ class CourseService:
             limit=per_page,
             is_public=is_public,
             level=level,
+            category_id=category_id,
+            sub_category_id=sub_category_id,
             min_enrollees=min_enrollees,
         )
 
@@ -292,3 +309,150 @@ class CourseService:
             )
 
         await self.repository.delete(course)
+
+
+class CategoryService:
+    """Service for category business logic."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+        self.category_repository = CategoryRepository(session)
+
+    async def create_category(self, category_data: dict) -> Category:
+        """Create a new category."""
+        # Check if category with same name exists
+        existing_category = await self.category_repository.get_by_name(
+            category_data["name"]
+        )
+        if existing_category:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Category with this name already exists",
+            )
+
+        category = Category(**category_data)
+        return await self.category_repository.create(category)
+
+    async def get_categories(
+        self, page: int = 1, per_page: int = 100
+    ) -> List[Category]:
+        """Get all categories."""
+        skip = (page - 1) * per_page
+        return await self.category_repository.get_all(skip=skip, limit=per_page)
+
+    async def update_category(
+        self, category_id: int, category_update: dict
+    ) -> Category:
+        """Update a category."""
+        category = await self.category_repository.get_by_id(category_id)
+        if not category:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Category not found",
+            )
+
+        # Update fields
+        for field, value in category_update.items():
+            if value is not None:
+                setattr(category, field, value)
+
+        return await self.category_repository.update(category)
+
+    async def delete_category(self, category_id: int) -> None:
+        """Delete a category."""
+        category = await self.category_repository.get_by_id(category_id)
+        if not category:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Category not found",
+            )
+
+        await self.category_repository.delete(category)
+
+
+class SubCategoryService:
+    """Service for sub-category business logic."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+        self.subcategory_repository = SubCategoryRepository(session)
+        self.category_repository = CategoryRepository(session)
+
+    async def create_subcategory(self, sub_category_data: dict) -> SubCategory:
+        """Create a new sub-category."""
+        # Check if category exists
+        category = await self.category_repository.get_by_id(
+            sub_category_data["category_id"]
+        )
+        if not category:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Category not found",
+            )
+
+        # Check if sub-category with same name exists
+        existing_subcategory = await self.subcategory_repository.get_by_name(
+            sub_category_data["name"]
+        )
+        if existing_subcategory:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Sub-category with this name already exists",
+            )
+
+        sub_category = SubCategory(**sub_category_data)
+        return await self.subcategory_repository.create(sub_category)
+
+    async def get_subcategories(
+        self, page: int = 1, per_page: int = 100, category_id: Optional[int] = None
+    ) -> List[SubCategory]:
+        """Get all sub-categories, optionally filtered by category."""
+        skip = (page - 1) * per_page
+        if category_id:
+            return await self.subcategory_repository.get_by_category_id(
+                category_id=category_id, skip=skip, limit=per_page
+            )
+        return await self.subcategory_repository.get_all(skip=skip, limit=per_page)
+
+    async def update_subcategory(
+        self, sub_category_id: int, sub_category_update: dict
+    ) -> SubCategory:
+        """Update a sub-category."""
+        sub_category = await self.subcategory_repository.get_by_id(sub_category_id)
+        if not sub_category:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Sub-category not found",
+            )
+
+        # If updating category_id, check if new category exists
+        if (
+            "category_id" in sub_category_update
+            and sub_category_update["category_id"] is not None
+        ):
+            category = await self.category_repository.get_by_id(
+                sub_category_update["category_id"]
+            )
+            if not category:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Category not found",
+                )
+
+        # Update fields
+        for field, value in sub_category_update.items():
+            if value is not None:
+                setattr(sub_category, field, value)
+
+        return await self.subcategory_repository.update(sub_category)
+
+    async def delete_subcategory(self, sub_category_id: int) -> None:
+        """Delete a sub-category."""
+        sub_category = await self.subcategory_repository.get_by_id(sub_category_id)
+        if not sub_category:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Sub-category not found",
+            )
+
+        await self.subcategory_repository.delete(sub_category)

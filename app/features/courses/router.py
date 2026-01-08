@@ -1,6 +1,7 @@
 """Course API endpoints."""
 
 from fastapi import APIRouter, Depends, status, HTTPException, Query
+from typing import List
 import traceback
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.database.session import get_async_session
@@ -17,9 +18,19 @@ from app.features.courses.schemas import (
     UserCourseResponse,
     PaginatedCoursesResponse,
     PaginatedUserCoursesResponse,
+    CategoryCreate,
+    CategoryResponse,
+    CategoryUpdate,
+    SubCategoryCreate,
+    SubCategoryResponse,
+    SubCategoryUpdate,
 )
 from app.features.courses.models import UserCourse
-from app.features.courses.service import CourseService
+from app.features.courses.service import (
+    CourseService,
+    CategoryService,
+    SubCategoryService,
+)
 from app.features.courses.generation_service import CourseGenerationService
 
 router = APIRouter()
@@ -298,6 +309,7 @@ async def get_courses(
     per_page: int = Query(10, ge=1, le=100, description="Items per page"),
     is_public: bool | None = Query(None, description="Filter by public/private"),
     level: str | None = Query(None, description="Filter by course level"),
+    category_id: int | None = Query(None, description="Filter by category ID"),
     min_enrollees: int | None = Query(None, ge=0, description="Minimum enrollees"),
     session: AsyncSession = Depends(get_async_session),
 ):
@@ -320,6 +332,7 @@ async def get_courses(
             per_page=per_page,
             is_public=is_public,
             level=level,
+            category_id=category_id,
             min_enrollees=min_enrollees,
         )
 
@@ -381,4 +394,251 @@ async def get_course_detail(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch course details: {str(e)}",
+        )
+
+
+# Category Endpoints
+
+
+@router.post("/categories", response_model=ApiResponse[CategoryResponse])
+async def create_category(
+    category_data: CategoryCreate,
+    session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Create a new category.
+
+    **Authentication required.**
+    """
+    try:
+        service = CategoryService(session)
+        category = await service.create_category(category_data.model_dump())
+
+        return success_response(
+            data=category,
+            details="Category created successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create category: {str(e)}",
+        )
+
+
+@router.get("/categories", response_model=ApiResponse[List[CategoryResponse]])
+async def get_categories(
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    per_page: int = Query(100, ge=1, le=100, description="Items per page"),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """
+    Get all categories.
+
+    **No authentication required.**
+    """
+    try:
+        service = CategoryService(session)
+        categories = await service.get_categories(page=page, per_page=per_page)
+
+        return success_response(
+            data=categories,
+            details=f"Retrieved {len(categories)} categories",
+        )
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch categories: {str(e)}",
+        )
+
+
+@router.patch("/categories/{category_id}", response_model=ApiResponse[CategoryResponse])
+async def update_category(
+    category_id: int,
+    category_update: CategoryUpdate,
+    session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Update a category.
+
+    **Authentication required.**
+    """
+    try:
+        service = CategoryService(session)
+        updated_category = await service.update_category(
+            category_id,
+            category_update.model_dump(exclude_unset=True),
+        )
+
+        return success_response(
+            data=updated_category,
+            details="Category updated successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update category: {str(e)}",
+        )
+
+
+@router.delete("/categories/{category_id}", response_model=ApiResponse[dict])
+async def delete_category(
+    category_id: int,
+    session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Delete a category.
+
+    **Authentication required.**
+    """
+    try:
+        service = CategoryService(session)
+        await service.delete_category(category_id)
+
+        return success_response(
+            data={"category_id": category_id},
+            details="Category deleted successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete category: {str(e)}",
+        )
+
+
+# SubCategory Endpoints
+
+
+@router.post("/sub-categories", response_model=ApiResponse[SubCategoryResponse])
+async def create_subcategory(
+    sub_category_data: SubCategoryCreate,
+    session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Create a new sub-category.
+
+    **Authentication required.**
+    """
+    try:
+        service = SubCategoryService(session)
+        sub_category = await service.create_subcategory(sub_category_data.model_dump())
+
+        return success_response(
+            data=sub_category,
+            details="Sub-category created successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create sub-category: {str(e)}",
+        )
+
+
+@router.get("/sub-categories", response_model=ApiResponse[List[SubCategoryResponse]])
+async def get_subcategories(
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    per_page: int = Query(100, ge=1, le=100, description="Items per page"),
+    category_id: int | None = Query(None, description="Filter by category ID"),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """
+    Get all sub-categories, optionally filtered by category.
+
+    **No authentication required.**
+    """
+    try:
+        service = SubCategoryService(session)
+        sub_categories = await service.get_subcategories(
+            page=page, per_page=per_page, category_id=category_id
+        )
+
+        return success_response(
+            data=sub_categories,
+            details=f"Retrieved {len(sub_categories)} sub-categories",
+        )
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch sub-categories: {str(e)}",
+        )
+
+
+@router.patch(
+    "/sub-categories/{sub_category_id}", response_model=ApiResponse[SubCategoryResponse]
+)
+async def update_subcategory(
+    sub_category_id: int,
+    sub_category_update: SubCategoryUpdate,
+    session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Update a sub-category.
+
+    **Authentication required.**
+    """
+    try:
+        service = SubCategoryService(session)
+        updated_sub_category = await service.update_subcategory(
+            sub_category_id,
+            sub_category_update.model_dump(exclude_unset=True),
+        )
+
+        return success_response(
+            data=updated_sub_category,
+            details="Sub-category updated successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update sub-category: {str(e)}",
+        )
+
+
+@router.delete("/sub-categories/{sub_category_id}", response_model=ApiResponse[dict])
+async def delete_subcategory(
+    sub_category_id: int,
+    session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Delete a sub-category.
+
+    **Authentication required.**
+    """
+    try:
+        service = SubCategoryService(session)
+        await service.delete_subcategory(sub_category_id)
+
+        return success_response(
+            data={"sub_category_id": sub_category_id},
+            details="Sub-category deleted successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete sub-category: {str(e)}",
         )

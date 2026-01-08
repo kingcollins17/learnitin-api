@@ -1,4 +1,5 @@
 """Async database session management with SQLModel and MySQL."""
+
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import NullPool
 from typing import AsyncGenerator
@@ -28,7 +29,7 @@ AsyncSessionLocal = async_sessionmaker(
 async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
     """
     Dependency for getting async database sessions.
-    
+
     Usage in FastAPI endpoints:
         async def my_endpoint(session: AsyncSession = Depends(get_async_session)):
             ...
@@ -47,14 +48,15 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
 async def init_db() -> None:
     """Initialize database - create all tables."""
     from app.common.database.base import SQLModel
-    
+
     # Import all models here to ensure they are registered with SQLModel
     from app.features.users.models import User  # noqa: F401
-    from app.features.courses.models import Course  # noqa: F401
+    from app.features.courses.models import Course, Category, SubCategory  # noqa: F401
     from app.features.modules.models import Module  # noqa: F401
     from app.features.lessons.models import Lesson  # noqa: F401
+
     # Add other model imports as you create them
-    
+
     async with engine.begin() as conn:
         # Create all tables
         await conn.run_sync(SQLModel.metadata.create_all)

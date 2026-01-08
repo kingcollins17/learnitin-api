@@ -68,6 +68,68 @@ class CourseGenerationResponse(BaseModel):
         from_attributes = True
 
 
+class CategoryBase(BaseModel):
+    """Base category schema."""
+
+    name: str
+    description: Optional[str] = None
+
+
+class CategoryCreate(CategoryBase):
+    """Schema for creating a category."""
+
+    pass
+
+
+class CategoryUpdate(BaseModel):
+    """Schema for updating a category."""
+
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
+class CategoryResponse(CategoryBase):
+    """Schema for category response."""
+
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class SubCategoryBase(BaseModel):
+    """Base sub-category schema."""
+
+    name: str
+    description: Optional[str] = None
+    category_id: int
+
+
+class SubCategoryCreate(SubCategoryBase):
+    """Schema for creating a sub-category."""
+
+    pass
+
+
+class SubCategoryUpdate(BaseModel):
+    """Schema for updating a sub-category."""
+
+    name: Optional[str] = None
+    description: Optional[str] = None
+    category_id: Optional[int] = None
+
+
+class SubCategoryResponse(SubCategoryBase):
+    """Schema for sub-category response."""
+
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 # Database schemas
 class CourseBase(BaseModel):
     """Base course schema with common fields."""
@@ -75,7 +137,10 @@ class CourseBase(BaseModel):
     title: str
     description: str
     duration: str
+    image_url: Optional[str] = None
     is_public: bool = False
+    category_id: Optional[int] = None
+    sub_category_id: Optional[int] = None
 
 
 class CourseCreate(CourseBase):
@@ -89,8 +154,11 @@ class CourseUpdate(BaseModel):
 
     title: Optional[str] = None
     description: Optional[str] = None
+    image_url: Optional[str] = None
     duration: Optional[str] = None
     is_public: Optional[bool] = None
+    category_id: Optional[int] = None
+    sub_category_id: Optional[int] = None
 
 
 class CourseResponse(CourseBase):
@@ -104,6 +172,8 @@ class CourseResponse(CourseBase):
 
     created_at: datetime
     updated_at: Optional[datetime] = None
+    category: Optional["CategoryResponse"] = None
+    sub_category: Optional["SubCategoryResponse"] = None
 
     class Config:
         from_attributes = True

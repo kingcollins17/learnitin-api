@@ -21,8 +21,10 @@ class Lesson(SQLModel, table=True):
     module_id: int = Field(foreign_key="modules.id", nullable=False, index=True)
     course_id: int = Field(foreign_key="courses.id", nullable=False, index=True)
     title: str = Field(nullable=False)
-    description: Optional[str] = Field(default=None)
-    objectives: Optional[str] = Field(default=None)  # JSON string of objectives list
+    description: Optional[str] = Field(default=None, sa_column=Column(Text))
+    objectives: Optional[str] = Field(
+        default=None, sa_column=Column(Text)
+    )  # JSON string of objectives list
     content: Optional[str] = Field(
         default=None, sa_column=Column(Text)
     )  # Markdown content (long text)

@@ -4,7 +4,8 @@ from datetime import datetime, timezone
 from typing import Optional
 from enum import Enum
 from enum import Enum
-from sqlmodel import Field, SQLModel, Relationship
+from sqlmodel import Field, SQLModel, Relationship, Column
+from sqlalchemy import Text
 from typing import List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -27,12 +28,45 @@ class CourseLevel(str, Enum):
     EXPERT = "expert"
 
 
+class Category(SQLModel, table=True):
+    """Category model for grouping courses."""
+
+    __tablename__ = "categories"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(unique=True, index=True, nullable=False)
+    description: Optional[str] = Field(default=None)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    courses: List["Course"] = Relationship(back_populates="category")
+    sub_categories: List["SubCategory"] = Relationship(back_populates="category")
+
+
+class SubCategory(SQLModel, table=True):
+    """SubCategory model for more granular grouping."""
+
+    __tablename__ = "sub_categories"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    category_id: int = Field(foreign_key="categories.id", nullable=False, index=True)
+    name: str = Field(unique=True, index=True, nullable=False)
+    description: Optional[str] = Field(default=None)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    category: Category = Relationship(back_populates="sub_categories")
+    courses: List["Course"] = Relationship(back_populates="sub_category")
+
+
 class Course(SQLModel, table=True):
     """Course model for database."""
 
     __tablename__ = "courses"
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    category_id: Optional[int] = Field(default=None, foreign_key="categories.id")
+    sub_category_id: Optional[int] = Field(
+        default=None, foreign_key="sub_categories.id"
+    )
     user_id: int = Field(
         foreign_key="users.id",
         nullable=False,
@@ -40,7 +74,8 @@ class Course(SQLModel, table=True):
         description="User ID of the creator",
     )
     title: str = Field(nullable=False)
-    description: str = Field(nullable=False)
+    description: str = Field(sa_column=Column(Text, nullable=False))
+    image_url: Optional[str] = Field(default=None)
     duration: str = Field(nullable=False)  # e.g., "4 weeks", "30 hours"
     is_public: bool = Field(default=False)  # Whether the course is publicly accessible
     learning_pace: LearningPace = Field(default=LearningPace.BALANCED)
@@ -50,6 +85,8 @@ class Course(SQLModel, table=True):
     updated_at: Optional[datetime] = Field(default=None)
 
     modules: List["Module"] = Relationship(back_populates="course")
+    category: Optional["Category"] = Relationship(back_populates="courses")
+    sub_category: Optional["SubCategory"] = Relationship(back_populates="courses")
 
     class Config:
         """Pydantic config."""
