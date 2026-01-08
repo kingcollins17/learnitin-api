@@ -162,6 +162,20 @@ class UserCourseRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_by_user_and_course_with_details(
+        self, user_id: int, course_id: int
+    ) -> Optional[UserCourse]:
+        """Get user course by user ID and course ID with course details eagerly loaded."""
+        from sqlalchemy.orm import selectinload
+
+        result = await self.session.execute(
+            select(UserCourse)
+            .where(UserCourse.user_id == user_id)
+            .where(UserCourse.course_id == course_id)
+            .options(selectinload("course"))  # type: ignore
+        )
+        return result.scalar_one_or_none()
+
     async def create(self, user_course: UserCourse) -> UserCourse:
         """Create a new user course record."""
         self.session.add(user_course)

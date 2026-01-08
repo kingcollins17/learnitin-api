@@ -205,14 +205,14 @@ class CourseService:
         )
 
     async def get_user_course_detail(
-        self, user_id: int, user_course_id: int
+        self, user_id: int, course_id: int
     ) -> Optional[UserCourse]:
         """
         Get user course detail.
 
         Args:
             user_id: ID of the user
-            user_course_id: ID of the user course
+            course_id: ID of the course
 
         Returns:
             UserCourse with course details, or None if not found
@@ -220,20 +220,16 @@ class CourseService:
         Raises:
             HTTPException: If user course not found or doesn't belong to user
         """
-        user_course = await self.user_course_repository.get_by_id_with_course(
-            user_course_id
+        user_course = (
+            await self.user_course_repository.get_by_user_and_course_with_details(
+                user_id=user_id, course_id=course_id
+            )
         )
 
         if not user_course:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User course not found",
-            )
-
-        if user_course.user_id != user_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have access to this course",
             )
 
         return user_course

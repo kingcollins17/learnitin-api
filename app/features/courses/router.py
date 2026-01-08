@@ -261,11 +261,9 @@ async def get_user_courses(
         )
 
 
-@router.get(
-    "/user/courses/{user_course_id}", response_model=ApiResponse[UserCourseResponse]
-)
+@router.get("/user/courses/detail", response_model=ApiResponse[UserCourseResponse])
 async def get_user_course_detail(
-    user_course_id: int,
+    course_id: int = Query(..., description="ID of the course"),
     session: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -285,7 +283,7 @@ async def get_user_course_detail(
         service = CourseService(session)
         user_course = await service.get_user_course_detail(
             user_id=current_user.id,
-            user_course_id=user_course_id,
+            course_id=course_id,
         )
 
         return success_response(

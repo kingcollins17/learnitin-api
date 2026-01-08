@@ -5,7 +5,7 @@ from typing import Optional
 from enum import Enum
 from enum import Enum
 from sqlmodel import Field, SQLModel, Relationship, Column
-from sqlalchemy import Text
+from sqlalchemy import Text, UniqueConstraint
 from typing import List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -105,10 +105,16 @@ class UserCourse(SQLModel, table=True):
     """User Course junction table."""
 
     __tablename__ = "user_courses"
+    __table_args__ = (
+        UniqueConstraint("user_id", "course_id", name="unique_user_course"),
+    )
 
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id", nullable=False, index=True)
     course_id: int = Field(foreign_key="courses.id", nullable=False, index=True)
+    current_module_id: Optional[int] = Field(
+        default=None, foreign_key="modules.id", index=True
+    )
     current_lesson_id: Optional[int] = Field(
         default=None, foreign_key="lessons.id", index=True
     )

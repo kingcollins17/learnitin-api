@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional
 if TYPE_CHECKING:
     from app.features.modules.models import Module
 
-from sqlalchemy import Text
+from sqlalchemy import Text, UniqueConstraint
 from app.features.courses.models import ProgressStatus
 
 
@@ -48,6 +48,9 @@ class UserLesson(SQLModel, table=True):
     """User Lesson junction table."""
 
     __tablename__ = "user_lessons"
+    __table_args__ = (
+        UniqueConstraint("user_id", "lesson_id", name="unique_user_lesson"),
+    )
 
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id", nullable=False, index=True)

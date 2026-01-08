@@ -1,0 +1,522 @@
+"""Lesson API endpoints."""
+
+from fastapi import APIRouter, Depends, status, HTTPException, Query, Body
+from typing import List, Optional
+import traceback
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.common.database.session import get_async_session
+from app.common.deps import get_current_active_user
+from app.common.responses import ApiResponse, success_response
+from app.features.users.models import User
+from app.features.lessons.schemas import (
+    LessonResponse,
+    LessonCreate,
+    LessonUpdate,
+    PaginatedLessonsResponse,
+    UserLessonResponse,
+    UserLessonCreate,
+    UserLessonUpdate,
+    PaginatedUserLessonsResponse,
+)
+from app.features.lessons.service import LessonService, UserLessonService
+
+router = APIRouter()
+
+
+# Lesson Endpoints
+
+
+@router.get("", response_model=ApiResponse[PaginatedLessonsResponse])
+async def get_lessons(
+    module_id: int | None = Query(None, description="Filter by module ID"),
+    course_id: int | None = Query(None, description="Filter by course ID"),
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    per_page: int = Query(100, ge=1, le=100, description="Items per page"),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """
+    Get lessons filtered by module or course.
+
+    **Query Parameters:**
+    - `module_id`: Filter by module ID (optional)
+    - `course_id`: Filter by course ID (optional)
+    - `page`: Page number (default: 1)
+    - `per_page`: Items per page (default: 100, max: 100)
+
+    **Note:** Provide either module_id or course_id.
+
+    **No authentication required** for public courses.
+    """
+    try:
+        service = LessonService(session)
+
+        if module_id:
+            lessons = await service.get_lessons_by_module(
+                module_id=module_id, page=page, per_page=per_page
+            )
+        elif course_id:
+            lessons = await service.get_lessons_by_course(
+                course_id=course_id, page=page, per_page=per_page
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Please provide either module_id or course_id",
+            )
+
+        lessons_response = [LessonResponse.model_validate(l) for l in lessons]
+
+        response_data = PaginatedLessonsResponse(
+            lessons=lessons_response,
+            page=page,
+            per_page=per_page,
+            total=len(lessons),
+        )
+
+        return success_response(
+            data=response_data,
+            details=f"Retrieved {len(lessons)} lesson(s)",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch lessons: {str(e)}",
+        )
+
+
+@router.get("/{lesson_id}", response_model=ApiResponse[LessonResponse])
+async def get_lesson(
+    lesson_id: int,
+    session: AsyncSession = Depends(get_async_session),
+):
+    """
+    Get a specific lesson by ID.
+
+    **No authentication required** for public courses.
+    """
+    try:
+        service = LessonService(session)
+        lesson = await service.get_lesson_by_id(lesson_id)
+
+        if not lesson:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Lesson not found",
+            )
+
+        return success_response(
+            data=lesson,
+            details="Lesson retrieved successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch lesson: {str(e)}",
+        )
+
+
+@router.post("", response_model=ApiResponse[LessonResponse])
+async def create_lesson(
+    lesson_data: LessonCreate,
+    session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Create a new lesson.
+
+    **Authentication required.**
+    """
+    try:
+        service = LessonService(session)
+        lesson = await service.create_lesson(lesson_data.model_dump())
+
+        return success_response(
+            data=lesson,
+            details="Lesson created successfully",
+        )
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create lesson: {str(e)}",
+        )
+
+
+@router.patch("/{lesson_id}", response_model=ApiResponse[LessonResponse])
+async def update_lesson(
+    lesson_id: int,
+    lesson_update: LessonUpdate,
+    session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Update a lesson.
+
+    **Authentication required.**
+    """
+    try:
+        service = LessonService(session)
+        updated_lesson = await service.update_lesson(
+            lesson_id=lesson_id,
+            lesson_update=lesson_update.model_dump(exclude_unset=True),
+        )
+
+        return success_response(
+            data=updated_lesson,
+            details="Lesson updated successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update lesson: {str(e)}",
+        )
+
+
+@router.delete("/{lesson_id}", response_model=ApiResponse[dict])
+async def delete_lesson(
+    lesson_id: int,
+    session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Delete a lesson.
+
+    **Authentication required.**
+    """
+    try:
+        service = LessonService(session)
+        await service.delete_lesson(lesson_id)
+
+        return success_response(
+            data={"lesson_id": lesson_id},
+            details="Lesson deleted successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete lesson: {str(e)}",
+        )
+
+
+# UserLesson Endpoints
+
+
+@router.post("/start", response_model=ApiResponse[UserLessonResponse])
+async def start_lesson(
+    user_lesson_data: UserLessonCreate,
+    session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Start a lesson (create user lesson progress record).
+
+    **Authentication required.**
+    """
+    try:
+        assert current_user.id
+        service = UserLessonService(session)
+        user_lesson = await service.start_lesson(
+            user_id=current_user.id,
+            lesson_id=user_lesson_data.lesson_id,
+            module_id=user_lesson_data.module_id,
+            course_id=user_lesson_data.course_id,
+        )
+
+        return success_response(
+            data=user_lesson,
+            details="Lesson started successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to start lesson: {str(e)}",
+        )
+
+
+@router.get("/user/lessons", response_model=ApiResponse[PaginatedUserLessonsResponse])
+async def get_user_lessons(
+    module_id: int | None = Query(None, description="Filter by module ID"),
+    course_id: int | None = Query(None, description="Filter by course ID"),
+    session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Get all user lessons filtered by module or course.
+
+    **Query Parameters:**
+    - `module_id`: Filter by module ID (optional)
+    - `course_id`: Filter by course ID (optional)
+
+    **Note:** Provide either module_id or course_id.
+
+    **Authentication required.**
+    """
+    try:
+        assert current_user.id
+        service = UserLessonService(session)
+
+        if module_id:
+            user_lessons = await service.get_user_lessons_by_module(
+                user_id=current_user.id,
+                module_id=module_id,
+            )
+        elif course_id:
+            user_lessons = await service.get_user_lessons_by_course(
+                user_id=current_user.id,
+                course_id=course_id,
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Please provide either module_id or course_id",
+            )
+
+        user_lessons_response = [
+            UserLessonResponse.model_validate(ul) for ul in user_lessons
+        ]
+
+        response_data = PaginatedUserLessonsResponse(
+            user_lessons=user_lessons_response,
+            page=1,
+            per_page=len(user_lessons),
+            total=len(user_lessons),
+        )
+
+        return success_response(
+            data=response_data,
+            details=f"Retrieved {len(user_lessons)} user lesson(s)",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch user lessons: {str(e)}",
+        )
+
+
+@router.get("/user/lessons/detail", response_model=ApiResponse[UserLessonResponse])
+async def get_user_lesson(
+    lesson_id: int = Query(..., description="ID of the lesson"),
+    session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Get user lesson progress for a specific lesson.
+
+    **Authentication required.**
+    """
+    try:
+        assert current_user.id
+        service = UserLessonService(session)
+        user_lesson = await service.get_user_lesson(
+            user_id=current_user.id,
+            lesson_id=lesson_id,
+        )
+
+        return success_response(
+            data=user_lesson,
+            details="User lesson retrieved successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch user lesson: {str(e)}",
+        )
+
+
+@router.patch("/user/lessons/update", response_model=ApiResponse[UserLessonResponse])
+async def update_user_lesson(
+    lesson_id: int = Query(..., description="ID of the lesson"),
+    user_lesson_update: Optional[UserLessonUpdate] = Body(None),
+    session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Update user lesson progress.
+
+    **Authentication required.**
+    """
+    try:
+        assert current_user.id
+        service = UserLessonService(session)
+
+        update_data = (
+            user_lesson_update.model_dump(exclude_unset=True)
+            if user_lesson_update
+            else {}
+        )
+
+        user_lesson = await service.update_user_lesson(
+            user_id=current_user.id,
+            lesson_id=lesson_id,
+            update_data=update_data,
+        )
+
+        return success_response(
+            data=user_lesson,
+            details="User lesson updated successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update user lesson: {str(e)}",
+        )
+
+
+@router.post("/user/lessons/unlock", response_model=ApiResponse[UserLessonResponse])
+async def unlock_lesson(
+    lesson_id: int = Query(..., description="ID of the lesson"),
+    session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Unlock a lesson for the current user.
+
+    **Authentication required.**
+    """
+    try:
+        assert current_user.id
+        service = UserLessonService(session)
+        user_lesson = await service.unlock_lesson(
+            user_id=current_user.id,
+            lesson_id=lesson_id,
+        )
+
+        return success_response(
+            data=user_lesson,
+            details="Lesson unlocked successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to unlock lesson: {str(e)}",
+        )
+
+
+@router.post(
+    "/user/lessons/unlock-audio", response_model=ApiResponse[UserLessonResponse]
+)
+async def unlock_audio(
+    lesson_id: int = Query(..., description="ID of the lesson"),
+    session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Unlock audio for a lesson.
+
+    **Authentication required.**
+    """
+    try:
+        assert current_user.id
+        service = UserLessonService(session)
+        user_lesson = await service.unlock_audio(
+            user_id=current_user.id,
+            lesson_id=lesson_id,
+        )
+
+        return success_response(
+            data=user_lesson,
+            details="Audio unlocked successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to unlock audio: {str(e)}",
+        )
+
+
+@router.post(
+    "/user/lessons/complete-quiz", response_model=ApiResponse[UserLessonResponse]
+)
+async def complete_quiz(
+    lesson_id: int = Query(..., description="ID of the lesson"),
+    session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Mark quiz as completed for a lesson.
+
+    **Authentication required.**
+    """
+    try:
+        assert current_user.id
+        service = UserLessonService(session)
+        user_lesson = await service.complete_quiz(
+            user_id=current_user.id,
+            lesson_id=lesson_id,
+        )
+
+        return success_response(
+            data=user_lesson,
+            details="Quiz completed successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to complete quiz: {str(e)}",
+        )
+
+
+@router.post("/user/lessons/complete", response_model=ApiResponse[UserLessonResponse])
+async def complete_lesson(
+    lesson_id: int = Query(..., description="ID of the lesson"),
+    session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Mark a lesson as completed.
+
+    **Authentication required.**
+    """
+    try:
+        assert current_user.id
+        service = UserLessonService(session)
+        user_lesson = await service.complete_lesson(
+            user_id=current_user.id,
+            lesson_id=lesson_id,
+        )
+
+        return success_response(
+            data=user_lesson,
+            details="Lesson completed successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to complete lesson: {str(e)}",
+        )

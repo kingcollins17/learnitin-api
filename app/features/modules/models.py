@@ -5,7 +5,7 @@ from typing import Optional
 from sqlmodel import Field, SQLModel
 from app.features.courses.models import ProgressStatus
 from sqlmodel import Field, SQLModel, Relationship, Column
-from sqlalchemy import Text
+from sqlalchemy import Text, UniqueConstraint
 from typing import List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -43,6 +43,9 @@ class UserModule(SQLModel, table=True):
     """User Module junction table."""
 
     __tablename__ = "user_modules"
+    __table_args__ = (
+        UniqueConstraint("user_id", "module_id", name="unique_user_module"),
+    )
 
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id", nullable=False, index=True)
