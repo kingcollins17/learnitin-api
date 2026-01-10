@@ -46,3 +46,9 @@ class UserResponse(UserBase):
 
 # Alias for backward compatibility
 User = UserResponse
+
+
+class UserVerifyRequest(BaseModel):
+    """Schema for verifying a user with OTP code."""
+
+    code: str

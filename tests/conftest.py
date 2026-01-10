@@ -1,4 +1,5 @@
 """Pytest configuration and shared fixtures."""
+
 import asyncio
 from typing import AsyncGenerator, Generator
 import pytest
@@ -31,20 +32,21 @@ async def test_engine():
         echo=False,
         future=True,
     )
-    
+
     # Import all models to ensure they're registered
     from app.features.users.models import User  # noqa: F401
-    
+    from app.features.otp.models import OTP  # noqa: F401
+
     # Create all tables
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
-    
+
     yield engine
-    
+
     # Drop all tables after tests
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.drop_all)
-    
+
     await engine.dispose()
 
 
@@ -58,7 +60,7 @@ async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
         autocommit=False,
         autoflush=False,
     )
-    
+
     async with async_session() as session:
         yield session
         await session.rollback()
@@ -67,18 +69,17 @@ async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
 @pytest.fixture(scope="function")
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """Create a test client with database session override."""
-    
+
     async def override_get_async_session() -> AsyncGenerator[AsyncSession, None]:
         yield db_session
-    
+
     app.dependency_overrides[get_async_session] = override_get_async_session
-    
+
     async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
         yield ac
-    
+
     app.dependency_overrides.clear()
 
 
@@ -89,7 +90,7 @@ def test_user_data() -> dict:
         "email": "test@example.com",
         "username": "testuser",
         "password": "TestPassword123!",
-        "full_name": "Test User"
+        "full_name": "Test User",
     }
 
 
@@ -102,14 +103,16 @@ async def created_user(client: AsyncClient, test_user_data: dict) -> dict:
 
 
 @pytest.fixture
-async def auth_token(client: AsyncClient, test_user_data: dict, created_user: dict) -> str:
+async def auth_token(
+    client: AsyncClient, test_user_data: dict, created_user: dict
+) -> str:
     """Get an authentication token for a test user."""
     response = await client.post(
         "/api/v1/auth/login",
         data={
             "username": test_user_data["username"],
-            "password": test_user_data["password"]
-        }
+            "password": test_user_data["password"],
+        },
     )
     assert response.status_code == 200
     return response.json()["access_token"]

@@ -15,7 +15,7 @@ class User(SQLModel, table=True):
     username: str = Field(unique=True, index=True, nullable=False)
     hashed_password: str = Field(nullable=False)
     full_name: Optional[str] = Field(default=None)
-    is_active: bool = Field(default=True)
+    is_active: bool = Field(default=False)
     is_superuser: bool = Field(default=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default=None)

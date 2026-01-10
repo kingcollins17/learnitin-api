@@ -5,11 +5,19 @@ import traceback
 from fastapi import APIRouter, Depends, status, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.database.session import get_async_session
-from app.common.deps import get_current_active_user
+from app.common.deps import get_current_active_user, get_current_user
 from app.common.responses import ApiResponse, success_response
 from app.features.users.models import User as UserModel
-from app.features.users.schemas import User, UserCreate, UserUpdate, UserResponse
+from app.features.users.schemas import (
+    User,
+    UserCreate,
+    UserUpdate,
+    UserResponse,
+    UserVerifyRequest,
+)
 from app.features.users.service import UserService
+from app.features.auth.otp_service import OTPService
+from app.features.auth.otp_repository import OTPRepository
 
 router = APIRouter()
 
@@ -119,4 +127,76 @@ async def list_users(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve users: {str(e)}",
+        )
+
+
+@router.post("/verify", response_model=ApiResponse[UserResponse])
+async def verify_user(
+    data: UserVerifyRequest,
+    session: AsyncSession = Depends(get_async_session),
+    current_user: UserModel = Depends(get_current_user),
+):
+    """
+    Verify the current user's account using an OTP code.
+
+    **Authentication required** - Users can only verify their own account.
+    The user must be signed in (but can be inactive) to use this endpoint.
+
+    This endpoint:
+    1. Validates the OTP code exists in the database
+    2. Ensures the OTP is associated with the current user's email
+    3. Activates the user's account (sets is_active=True)
+    4. Marks the OTP as used
+
+    **Request Body:**
+    - `code`: The OTP code received via email
+
+    **Response:**
+    Returns the updated user with `is_active=True`
+
+    **Error Responses:**
+    - `400 Bad Request`: Invalid OTP code or OTP doesn't match user's email
+    - `400 Bad Request`: User is already active
+    - `401 Unauthorized`: Not authenticated
+    - `403 Forbidden`: OTP doesn't belong to the user
+    - `500 Internal Server Error`: Server error
+    """
+    try:
+        # Initialize services
+        otp_repository = OTPRepository(session)
+        otp_service = OTPService(otp_repository)
+        user_service = UserService(session)
+
+        # Verify OTP belongs to the current user and mark as used
+        await otp_service.verify_and_validate_otp_for_user(
+            code=data.code, user_email=current_user.email
+        )
+
+        # Activate the user
+        user = await user_service.activate_user(current_user.email)
+
+        # Commit the transaction
+        await session.commit()
+
+        return success_response(
+            data=user, details="User verified and activated successfully"
+        )
+    except ValueError as e:
+        # Handle OTP validation errors from OTPService
+        raise HTTPException(
+            status_code=(
+                status.HTTP_400_BAD_REQUEST
+                if "Invalid OTP" in str(e) or "not associated" in str(e)
+                else status.HTTP_403_FORBIDDEN
+            ),
+            detail=str(e),
+        )
+    except HTTPException:
+        traceback.print_exc()
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to verify user: {str(e)}",
         )
