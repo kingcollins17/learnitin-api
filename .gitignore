@@ -28,7 +28,7 @@ ENV/
 # Environment Variables
 .env
 *.env*
-
+*credentials.json
 # IDE
 .vscode/
 .idea/
