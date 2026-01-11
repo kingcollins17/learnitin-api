@@ -25,6 +25,9 @@ class ModuleOverview(BaseModel):
     title: str = Field(description="Module title")
     description: str = Field(description="Module description")
     duration: str = Field(description="Estimated duration for the module")
+    objectives: Optional[List[str]] = Field(
+        default=None, description="Learning objectives for this module"
+    )
     lessons: List[LessonOverview] = Field(description="List of lessons in this module")
 
 
@@ -185,6 +188,7 @@ class LessonResponse(BaseModel):
     id: int
     title: str
     description: Optional[str] = None
+    objectives: Optional[str] = None  # JSON string of objectives list
     credit_cost: int = 0
     order: int
 
@@ -198,6 +202,7 @@ class ModuleResponse(BaseModel):
     id: int
     title: str
     description: Optional[str] = None
+    objectives: Optional[str] = None  # JSON string of objectives list
     order: int
     lessons: List[LessonResponse] = []
 

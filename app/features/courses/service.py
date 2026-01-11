@@ -72,8 +72,8 @@ class CourseService:
                 description=module_data.description,
                 module_slug=f"{slug}-{i+1}",  # Ensure uniqueness with index
                 objectives=json.dumps(
-                    []
-                ),  # Default empty list for now as it's not in ModuleOverview
+                    module_data.objectives if module_data.objectives else []
+                ),
                 order=i,
             )
             module = await self.module_repository.create(module)
