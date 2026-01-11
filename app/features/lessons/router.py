@@ -10,15 +10,25 @@ from app.common.responses import ApiResponse, success_response
 from app.features.users.models import User
 from app.features.lessons.schemas import (
     LessonResponse,
+    LessonDetailResponse,
     LessonCreate,
     LessonUpdate,
     PaginatedLessonsResponse,
     UserLessonResponse,
     UserLessonCreate,
+    UserLessonCreate,
     UserLessonUpdate,
     PaginatedUserLessonsResponse,
+    LessonStartRequest,
 )
 from app.features.lessons.service import LessonService, UserLessonService
+from app.features.lessons.lecture_service import lecture_conversion_service
+from app.services.audio_generation_service import audio_generation_service
+from app.services.storage_service import firebase_storage_service
+from app.features.users.service import UserService
+from app.features.courses.repository import CourseRepository
+from app.features.modules.repository import ModuleRepository
+from app.features.lessons.generation_service import lesson_generation_service
 
 router = APIRouter()
 
@@ -87,7 +97,7 @@ async def get_lessons(
         )
 
 
-@router.get("/{lesson_id}", response_model=ApiResponse[LessonResponse])
+@router.get("/{lesson_id}", response_model=ApiResponse[LessonDetailResponse])
 async def get_lesson(
     lesson_id: int,
     session: AsyncSession = Depends(get_async_session),
@@ -121,7 +131,7 @@ async def get_lesson(
         )
 
 
-@router.post("", response_model=ApiResponse[LessonResponse])
+@router.post("", response_model=ApiResponse[LessonDetailResponse])
 async def create_lesson(
     lesson_data: LessonCreate,
     session: AsyncSession = Depends(get_async_session),
@@ -148,7 +158,7 @@ async def create_lesson(
         )
 
 
-@router.patch("/{lesson_id}", response_model=ApiResponse[LessonResponse])
+@router.patch("/{lesson_id}", response_model=ApiResponse[LessonDetailResponse])
 async def update_lesson(
     lesson_id: int,
     lesson_update: LessonUpdate,
@@ -215,7 +225,7 @@ async def delete_lesson(
 
 @router.post("/start", response_model=ApiResponse[UserLessonResponse])
 async def start_lesson(
-    user_lesson_data: UserLessonCreate,
+    request: LessonStartRequest,
     session: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -226,13 +236,59 @@ async def start_lesson(
     """
     try:
         assert current_user.id
-        service = UserLessonService(session)
-        user_lesson = await service.start_lesson(
+
+        # 1. Fetch lesson details first to get context (module_id, course_id)
+        lesson_service = LessonService(session)
+        lesson = await lesson_service.get_lesson_by_id(request.lesson_id)
+
+        if not lesson:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Lesson not found",
+            )
+
+        user_lesson_service = UserLessonService(session)
+
+        # 2. Start the lesson (create record)
+        user_lesson = await user_lesson_service.start_lesson(
             user_id=current_user.id,
-            lesson_id=user_lesson_data.lesson_id,
-            module_id=user_lesson_data.module_id,
-            course_id=user_lesson_data.course_id,
+            lesson_id=request.lesson_id,
+            module_id=lesson.module_id,
+            course_id=lesson.course_id,
         )
+
+        # 3. Check and generate content if missing
+        await check_and_generate_lesson_content(
+            session=session,
+            lesson_id=request.lesson_id,
+            module_id=lesson.module_id,
+            course_id=lesson.course_id,
+        )
+
+        # 4. Check credits and unlock if applicable
+        user_service = UserService(session)
+
+        # Check and deduct credits if applicable
+        if lesson.credit_cost > 0:
+            if current_user.credits >= lesson.credit_cost:
+                # Deduct credits
+                current_user.credits -= lesson.credit_cost
+                await user_service.repository.update(current_user)
+
+                # Unlock lesson
+                user_lesson = await user_lesson_service.unlock_lesson(
+                    user_id=current_user.id, lesson_id=request.lesson_id
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail=f"Insufficient credits to start lesson. Required: {lesson.credit_cost}, Available: {current_user.credits}",
+                )
+        else:
+            # Free lesson, unlock automatically
+            user_lesson = await user_lesson_service.unlock_lesson(
+                user_id=current_user.id, lesson_id=request.lesson_id
+            )
 
         return success_response(
             data=user_lesson,
@@ -246,6 +302,43 @@ async def start_lesson(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to start lesson: {str(e)}",
         )
+
+
+async def check_and_generate_lesson_content(
+    session: AsyncSession,
+    lesson_id: int,
+    module_id: int,
+    course_id: int,
+):
+    """
+    Check if lesson content is missing and generate it if needed.
+    """
+    lesson_service = LessonService(session)
+    lesson = await lesson_service.get_lesson_by_id(lesson_id)
+
+    if lesson and not lesson.content:
+        # Fetch course and module details for context
+        course_repo = CourseRepository(session)
+        module_repo = ModuleRepository(session)
+
+        course = await course_repo.get_by_id(course_id)
+        module = await module_repo.get_by_id(module_id)
+
+        if course and module:
+            # Generate content
+            print(f"Generating content for lesson {lesson_id}...")
+            generated_content = await lesson_generation_service.generate_lesson_content(
+                course=course,
+                module=module,
+                lesson=lesson,
+            )
+
+            # Update lesson with generated content
+            await lesson_service.update_lesson(
+                lesson_id=lesson_id,
+                lesson_update={"content": generated_content},
+            )
+            print(f"Content generated and saved for lesson {lesson_id}")
 
 
 @router.get("/user/lessons", response_model=ApiResponse[PaginatedUserLessonsResponse])
@@ -430,18 +523,79 @@ async def unlock_audio(
     """
     Unlock audio for a lesson.
 
-    **Authentication required.**
+    Generates audio if missing, deducts credits, and marks as unlocked.
     """
     try:
         assert current_user.id
+        lesson_service = LessonService(session)
+        user_service = UserService(session)
         service = UserLessonService(session)
+
+        # 1. Get the lesson
+        lesson = await lesson_service.get_lesson_by_id(lesson_id)
+        if not lesson:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Lesson not found",
+            )
+
+        # 2. Check credits
+        if current_user.credits < lesson.audio_credit_cost:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail=f"Insufficient credits. Required: {lesson.audio_credit_cost}, Available: {current_user.credits}",
+            )
+
+        # 3. Check and generate audio if missing
+        if not lesson.audio_transcript_url:
+            if not lesson.content:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Lesson content is empty, cannot generate audio.",
+                )
+
+            # Convert content to lecture script
+            print(f"Converting content to lecture script for lesson {lesson_id}...")
+            lecture_script = await lecture_conversion_service.convert_to_lecture(
+                lesson.content
+            )
+
+            # Generate audio bytes
+            print(f"Generating audio for lesson {lesson_id}...")
+            audio_bytes = await audio_generation_service.generate_audio(lecture_script)
+
+            # Upload to Firebase
+            print(f"Uploading audio for lesson {lesson_id}...")
+            audio_url = firebase_storage_service.upload_audio(
+                audio_data=audio_bytes, folder="generated_audio"
+            )
+
+            # Update lesson with audio URL
+            updated_lesson = await lesson_service.update_lesson(
+                lesson_id=lesson_id, lesson_update={"audio_transcript_url": audio_url}
+            )
+            print(f"Audio generated and saved: {audio_url}")
+
+        # 4. Unlock audio for user
         user_lesson = await service.unlock_audio(
             user_id=current_user.id,
             lesson_id=lesson_id,
         )
 
+        # 5. Deduct credits
+        if lesson.audio_credit_cost > 0:
+            current_user.credits -= lesson.audio_credit_cost
+            await user_service.repository.update(current_user)
+
+        # Prepare response with audio URL
+        response = UserLessonResponse.model_validate(user_lesson)
+        # Use generated audio_url if we just made it, otherwise use existing one from lesson
+        response.audio_transcript_url = (
+            audio_url if "audio_url" in locals() else lesson.audio_transcript_url
+        )
+
         return success_response(
-            data=user_lesson,
+            data=response,
             details="Audio unlocked successfully",
         )
     except HTTPException:

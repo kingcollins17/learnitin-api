@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # Security
     SECRET_KEY: str = Field(default="your-secret-key-change-in-production")
     ALGORITHM: str = Field(default="HS256")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30)
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=43200)
 
     # Database - MySQL Configuration
     DB_HOST: str = Field(default="localhost")
@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     # Email
     EMAIL_FROM: str = Field(default="noreply@learnitin.com")
     RESEND_API_KEY: str = Field(default="")
+
+    # Firebase
+    FIREBASE_STORAGE_BUCKET: str = Field(default="")
+    FIREBASE_CREDENTIALS_JSON: str = Field(default="")
 
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = Field(

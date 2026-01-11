@@ -27,6 +27,9 @@ from app.features.courses.repository import (
 )
 import json
 import re
+import uuid
+from app.services.image_generation_service import image_generation_service
+from app.services.storage_service import firebase_storage_service
 
 
 class CourseService:
@@ -60,6 +63,29 @@ class CourseService:
             learning_pace=LearningPace.BALANCED,  # Default values
             level=CourseLevel.BEGINNER,
         )
+
+        # Generate Course Image
+        try:
+            # Create a descriptive prompt for the image
+            prompt = f"Abstract, modern, high quality cover image for an online course titled '{course_data.title}'. Context: {course_data.description[:200]}"
+            print(f"Generating course image with prompt: {prompt}")
+
+            image_bytes = await image_generation_service.generate_image(prompt)
+
+            if image_bytes:
+                filename = f"courses/{user_id}/{uuid.uuid4()}.png"
+                # Upload to firebase
+                image_url = firebase_storage_service.upload_bytes(
+                    data=image_bytes,
+                    destination_path=filename,
+                    content_type="image/png",
+                )
+                course.image_url = image_url
+                print(f"Course image generated and uploaded to: {image_url}")
+        except Exception as e:
+            print(f"Failed to generate course image: {e}")
+            # Continue without image if generation fails
+
         course = await self.repository.create(course)
 
         # 2. Create Modules and Lessons

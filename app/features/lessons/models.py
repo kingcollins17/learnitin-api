@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from app.features.modules.models import Module
 
 from sqlalchemy import Text, UniqueConstraint
+from sqlalchemy.dialects.mysql import LONGTEXT
 from app.features.courses.models import ProgressStatus
 
 
@@ -26,9 +27,9 @@ class Lesson(SQLModel, table=True):
         default=None, sa_column=Column(Text)
     )  # JSON string of objectives list
     content: Optional[str] = Field(
-        default=None, sa_column=Column(Text)
+        default=None, sa_column=Column(LONGTEXT)
     )  # Markdown content (long text)
-    audio_transcript_url: Optional[str] = Field(default=None)
+    audio_transcript_url: Optional[str] = Field(default=None, sa_column=Column(Text))
     has_quiz: bool = Field(default=False)
     credit_cost: int = Field(default=0)  # Credits required to unlock this lesson
     audio_credit_cost: int = Field(default=0)
@@ -57,7 +58,6 @@ class UserLesson(SQLModel, table=True):
     course_id: int = Field(foreign_key="courses.id", nullable=False, index=True)
     module_id: int = Field(foreign_key="modules.id", nullable=False, index=True)
     lesson_id: int = Field(foreign_key="lessons.id", nullable=False, index=True)
-    is_unlocked: bool = Field(default=False)
     is_lesson_unlocked: bool = Field(default=False)
     is_audio_unlocked: bool = Field(default=False)
     is_quiz_completed: bool = Field(default=False)

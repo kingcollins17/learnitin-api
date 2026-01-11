@@ -8,7 +8,8 @@ from app.features.lessons.repository import LessonRepository, UserLessonReposito
 from app.features.lessons.models import Lesson, UserLesson
 from app.features.courses.models import ProgressStatus
 from app.features.lessons.generation_service import lesson_generation_service
-from app.features.modules.repository import ModuleRepository
+from app.features.modules.repository import ModuleRepository, UserModuleRepository
+from app.features.modules.service import UserModuleService
 from app.features.courses.repository import CourseRepository, UserCourseRepository
 
 
@@ -211,6 +212,8 @@ class UserLessonService:
         self.repository = UserLessonRepository(session)
         self.lesson_repo = LessonRepository(session)
         self.user_course_repo = UserCourseRepository(session)
+        self.user_module_repo = UserModuleRepository(session)
+        self.user_module_service = UserModuleService(session)
 
     async def start_lesson(
         self, user_id: int, lesson_id: int, module_id: int, course_id: int
@@ -237,6 +240,17 @@ class UserLessonService:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="User has already started this lesson",
+            )
+
+        # Check and start module if needed
+        # We try to get the user module directly to see if it exists
+        user_module = await self.user_module_repo.get_by_user_and_module(
+            user_id=user_id, module_id=module_id
+        )
+        if not user_module:
+            # Start the module automatically
+            await self.user_module_service.start_module(
+                user_id=user_id, module_id=module_id, course_id=course_id
             )
 
         # Check if previous lesson is completed
@@ -395,7 +409,7 @@ class UserLessonService:
         return await self.update_user_lesson(
             user_id=user_id,
             lesson_id=lesson_id,
-            update_data={"is_lesson_unlocked": True, "is_unlocked": True},
+            update_data={"is_lesson_unlocked": True},
         )
 
     async def unlock_audio(self, user_id: int, lesson_id: int) -> UserLesson:
