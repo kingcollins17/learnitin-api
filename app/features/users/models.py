@@ -19,7 +19,6 @@ class User(SQLModel, table=True):
     is_superuser: bool = Field(default=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default=None)
-    credits: int = Field(default=0)
     current_plan: Optional[str] = Field(default="free")
     last_subscribed_at: Optional[datetime] = Field(default=None)
 

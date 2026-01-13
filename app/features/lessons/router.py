@@ -25,7 +25,6 @@ from app.features.lessons.service import LessonService, UserLessonService
 from app.features.lessons.lecture_service import lecture_conversion_service
 from app.services.audio_generation_service import audio_generation_service
 from app.services.storage_service import firebase_storage_service
-from app.features.users.service import UserService
 from app.features.courses.repository import CourseRepository
 from app.features.modules.repository import ModuleRepository
 from app.features.lessons.generation_service import lesson_generation_service
@@ -265,30 +264,10 @@ async def start_lesson(
             course_id=lesson.course_id,
         )
 
-        # 4. Check credits and unlock if applicable
-        user_service = UserService(session)
-
-        # Check and deduct credits if applicable
-        if lesson.credit_cost > 0:
-            if current_user.credits >= lesson.credit_cost:
-                # Deduct credits
-                current_user.credits -= lesson.credit_cost
-                await user_service.repository.update(current_user)
-
-                # Unlock lesson
-                user_lesson = await user_lesson_service.unlock_lesson(
-                    user_id=current_user.id, lesson_id=request.lesson_id
-                )
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                    detail=f"Insufficient credits to start lesson. Required: {lesson.credit_cost}, Available: {current_user.credits}",
-                )
-        else:
-            # Free lesson, unlock automatically
-            user_lesson = await user_lesson_service.unlock_lesson(
-                user_id=current_user.id, lesson_id=request.lesson_id
-            )
+        # 4. Unlock lesson automatically
+        user_lesson = await user_lesson_service.unlock_lesson(
+            user_id=current_user.id, lesson_id=request.lesson_id
+        )
 
         return success_response(
             data=user_lesson,
@@ -523,12 +502,11 @@ async def unlock_audio(
     """
     Unlock audio for a lesson.
 
-    Generates audio if missing, deducts credits, and marks as unlocked.
+    Generates audio if missing and marks as unlocked.
     """
     try:
         assert current_user.id
         lesson_service = LessonService(session)
-        user_service = UserService(session)
         service = UserLessonService(session)
 
         # 1. Get the lesson
@@ -537,13 +515,6 @@ async def unlock_audio(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Lesson not found",
-            )
-
-        # 2. Check credits
-        if current_user.credits < lesson.audio_credit_cost:
-            raise HTTPException(
-                status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                detail=f"Insufficient credits. Required: {lesson.audio_credit_cost}, Available: {current_user.credits}",
             )
 
         # 3. Check and generate audio if missing
@@ -581,11 +552,6 @@ async def unlock_audio(
             user_id=current_user.id,
             lesson_id=lesson_id,
         )
-
-        # 5. Deduct credits
-        if lesson.audio_credit_cost > 0:
-            current_user.credits -= lesson.audio_credit_cost
-            await user_service.repository.update(current_user)
 
         # Prepare response with audio URL
         response = UserLessonResponse.model_validate(user_lesson)

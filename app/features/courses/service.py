@@ -112,7 +112,6 @@ class CourseService:
                     title=lesson_data.title,
                     description=f"Duration: {lesson_data.duration}",
                     objectives=json.dumps(lesson_data.objectives),
-                    credit_cost=lesson_data.credit_cost,
                     order=j,
                 )
                 await self.lesson_repository.create(lesson)

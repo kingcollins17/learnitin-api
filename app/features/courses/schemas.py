@@ -14,9 +14,6 @@ class LessonOverview(BaseModel):
     duration: str = Field(
         description="Estimated duration (e.g., '30 minutes', '1 hour')"
     )
-    credit_cost: int = Field(
-        default=0, description="Credits required to unlock (0-10, 0 for free lessons)"
-    )
 
 
 class ModuleOverview(BaseModel):
@@ -189,7 +186,6 @@ class LessonResponse(BaseModel):
     title: str
     description: Optional[str] = None
     objectives: Optional[str] = None  # JSON string of objectives list
-    credit_cost: int = 0
     order: int
 
     class Config:

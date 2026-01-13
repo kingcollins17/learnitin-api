@@ -36,7 +36,6 @@ class UserResponse(UserBase):
     is_superuser: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
-    credits: int
     current_plan: Optional[str] = "free"
     last_subscribed_datetime: Optional[datetime] = None
 

@@ -31,8 +31,6 @@ class Lesson(SQLModel, table=True):
     )  # Markdown content (long text)
     audio_transcript_url: Optional[str] = Field(default=None, sa_column=Column(Text))
     has_quiz: bool = Field(default=False)
-    credit_cost: int = Field(default=0)  # Credits required to unlock this lesson
-    audio_credit_cost: int = Field(default=0)
     order: int = Field(default=0, nullable=False)  # Order within the module
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default=None)

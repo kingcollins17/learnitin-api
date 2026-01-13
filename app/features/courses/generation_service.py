@@ -43,16 +43,6 @@ For each course you design:
 - Tailor the content to the specified difficulty level
 - Make the content engaging and practical
 
-**IMPORTANT - Credit Cost Assignment:**
-- Assign a credit_cost to each lesson (integer from 0 to 10)
-- The FIRST 2-3 lessons in the ENTIRE COURSE should have credit_cost = 0 (free preview lessons)
-- After the free lessons, assign credit costs based on lesson complexity and value:
-  * Basic/introductory lessons: 1-3 credits
-  * Intermediate lessons with practical exercises: 4-6 credits
-  * Advanced lessons with complex topics: 7-8 credits
-  * Capstone/project lessons: 9-10 credits
-- Consider the difficulty level when assigning costs (beginner courses should have lower costs overall)
-
 Always structure your response as a list of courses, even if generating just one course."""
 
         # Build the user prompt with request details
@@ -76,12 +66,8 @@ Please generate 1-2 course options that cover this topic effectively. Each cours
 - Each lesson should have:
   * Specific learning objectives
   * Duration estimates
-  * A credit_cost value (0-10) following the rules:
-    - First 2-3 lessons of the course: credit_cost = 0 (free)
-    - Remaining lessons: credit_cost based on complexity (1-10)
 
-Make the courses practical, engaging, and suitable for {request.level} learners.
-Remember to assign appropriate credit costs to enable a freemium model with free preview lessons."""
+Make the courses practical, engaging, and suitable for {request.level} learners."""
 
         # Define the response schema for structured output
         class CoursesResponse(BaseModel):

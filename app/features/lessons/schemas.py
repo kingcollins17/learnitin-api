@@ -15,8 +15,6 @@ class LessonBase(BaseModel):
     # content is excluded from base to avoid sending it in lists
     audio_transcript_url: Optional[str] = None
     has_quiz: bool = False
-    credit_cost: int = 0
-    audio_credit_cost: int = 0
     order: int = 0
 
 
@@ -37,8 +35,6 @@ class LessonUpdate(BaseModel):
     content: Optional[str] = None  # Markdown content
     audio_transcript_url: Optional[str] = None
     has_quiz: Optional[bool] = None
-    credit_cost: Optional[int] = None
-    audio_credit_cost: Optional[int] = None
     order: Optional[int] = None
 
 
