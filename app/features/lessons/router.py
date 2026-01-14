@@ -1,10 +1,18 @@
 """Lesson API endpoints."""
 
-from fastapi import APIRouter, Depends, status, HTTPException, Query, Body
+from fastapi import (
+    APIRouter,
+    Depends,
+    status,
+    HTTPException,
+    Query,
+    Body,
+    BackgroundTasks,
+)
 from typing import List, Optional
 import traceback
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.common.database.session import get_async_session
+from app.common.database.session import get_async_session, AsyncSessionLocal
 from app.common.deps import get_current_active_user
 from app.common.responses import ApiResponse, success_response
 from app.features.users.models import User
@@ -491,39 +499,30 @@ async def unlock_lesson(
         )
 
 
-@router.post(
-    "/user/lessons/unlock-audio", response_model=ApiResponse[UserLessonResponse]
-)
-async def unlock_audio(
-    lesson_id: int = Query(..., description="ID of the lesson"),
-    session: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_active_user),
-):
+async def generate_audio_background(lesson_id: int):
     """
-    Unlock audio for a lesson.
-
-    Generates audio if missing and marks as unlocked.
+    Background task to generate audio for a lesson.
     """
-    try:
-        assert current_user.id
-        lesson_service = LessonService(session)
-        service = UserLessonService(session)
-
-        # 1. Get the lesson
-        lesson = await lesson_service.get_lesson_by_id(lesson_id)
-        if not lesson:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Lesson not found",
-            )
-
-        # 3. Check and generate audio if missing
-        if not lesson.audio_transcript_url:
-            if not lesson.content:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Lesson content is empty, cannot generate audio.",
+    async with AsyncSessionLocal() as session:
+        try:
+            lesson_service = LessonService(session)
+            # 1. Get the lesson
+            lesson = await lesson_service.get_lesson_by_id(lesson_id)
+            if not lesson:
+                print(
+                    f"Lesson {lesson_id} not found during background audio generation."
                 )
+                return
+
+            if lesson.audio_transcript_url:
+                print(f"Audio already exists for lesson {lesson_id}.")
+                return
+
+            if not lesson.content:
+                print(
+                    f"Lesson content is empty for {lesson_id}, cannot generate audio."
+                )
+                return
 
             # Convert content to lecture script
             print(f"Converting content to lecture script for lesson {lesson_id}...")
@@ -547,6 +546,53 @@ async def unlock_audio(
             )
             print(f"Audio generated and saved: {audio_url}")
 
+        except Exception as e:
+            traceback.print_exc()
+            print(f"Failed to generate audio for lesson {lesson_id}: {str(e)}")
+
+
+@router.post(
+    "/user/lessons/unlock-audio", response_model=ApiResponse[UserLessonResponse]
+)
+async def unlock_audio(
+    background_tasks: BackgroundTasks,
+    lesson_id: int = Query(..., description="ID of the lesson"),
+    session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Unlock audio for a lesson.
+
+    Generates audio if missing and marks as unlocked.
+    """
+    try:
+        assert current_user.id
+        lesson_service = LessonService(session)
+        service = UserLessonService(session)
+
+        # 1. Get the lesson
+        lesson = await lesson_service.get_lesson_by_id(lesson_id)
+        if not lesson:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Lesson not found",
+            )
+
+        # 3. Check and generate audio if missing
+        message = "Audio unlocked successfully"
+        audio_url = None
+
+        if not lesson.audio_transcript_url:
+            if not lesson.content:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Lesson content is empty, cannot generate audio.",
+                )
+
+            # Trigger background generation
+            background_tasks.add_task(generate_audio_background, lesson_id)
+            message = "Audio is being prepared. Please check back shortly."
+
         # 4. Unlock audio for user
         user_lesson = await service.unlock_audio(
             user_id=current_user.id,
@@ -556,13 +602,11 @@ async def unlock_audio(
         # Prepare response with audio URL
         response = UserLessonResponse.model_validate(user_lesson)
         # Use generated audio_url if we just made it, otherwise use existing one from lesson
-        response.audio_transcript_url = (
-            audio_url if "audio_url" in locals() else lesson.audio_transcript_url
-        )
+        response.audio_transcript_url = lesson.audio_transcript_url
 
         return success_response(
             data=response,
-            details="Audio unlocked successfully",
+            details=message,
         )
     except HTTPException:
         raise
