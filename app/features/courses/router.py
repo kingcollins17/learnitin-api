@@ -89,6 +89,10 @@ async def create_course(
         service = CourseService(session)
         course = await service.create_course(current_user.id, course_data)
 
+        # Enroll the creator in the course
+        assert course.id
+        await service.enroll_course(current_user.id, course.id)
+
         return success_response(data=course, details="Course created successfully")
     except Exception as e:
         traceback.print_exc()

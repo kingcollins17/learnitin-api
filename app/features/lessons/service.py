@@ -11,6 +11,9 @@ from app.features.lessons.generation_service import lesson_generation_service
 from app.features.modules.repository import ModuleRepository, UserModuleRepository
 from app.features.modules.service import UserModuleService
 from app.features.courses.repository import CourseRepository, UserCourseRepository
+from app.features.lessons.lecture_service import lecture_conversion_service
+from app.services.audio_generation_service import audio_generation_service
+from app.services.storage_service import firebase_storage_service
 
 
 class LessonService:
@@ -51,18 +54,37 @@ class LessonService:
         lesson.content = content
         return await self.repository.update(lesson)
 
-    async def generate_audio_transcription(self, lesson_id: int) -> str:
+    async def generate_audio_from_content(self, lesson_id: int) -> Optional[Lesson]:
         """
-        Generate (mock) audio transcription for a lesson.
+        Generate audio from lesson content.
 
         Args:
             lesson_id: ID of the lesson
 
         Returns:
-            URL to the mock audio transcription
+            Updated Lesson with audio_transcript_url or None if generation failed/invalid
         """
-        # In a real implementation, this would call a TTS service
-        return f"https://storage.example.com/audio/lessons/{lesson_id}.mp3"
+        lesson = await self.get_lesson_by_id(lesson_id)
+        if not lesson or not lesson.content:
+            return None
+
+        # Convert content to lecture script
+        lecture_script = await lecture_conversion_service.convert_to_lecture(
+            lesson.content
+        )
+
+        # Generate audio bytes
+        audio_bytes = await audio_generation_service.generate_audio(lecture_script)
+
+        # Upload to Firebase
+        audio_url = firebase_storage_service.upload_audio(
+            audio_data=audio_bytes, folder="generated_audio"
+        )
+
+        # Update lesson with audio URL
+        return await self.update_lesson(
+            lesson_id=lesson_id, lesson_update={"audio_transcript_url": audio_url}
+        )
 
     async def update_content_markdown(
         self, lesson_id: int, content_update: str

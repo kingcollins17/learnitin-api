@@ -36,6 +36,7 @@ from app.services.storage_service import firebase_storage_service
 from app.features.courses.repository import CourseRepository
 from app.features.modules.repository import ModuleRepository
 from app.features.lessons.generation_service import lesson_generation_service
+from app.features.lessons.tasks import generate_audio_background
 
 router = APIRouter()
 
@@ -497,58 +498,6 @@ async def unlock_lesson(
         )
 
 
-async def generate_audio_background(lesson_id: int):
-    """
-    Background task to generate audio for a lesson.
-    """
-    async with AsyncSessionLocal() as session:
-        try:
-            lesson_service = LessonService(session)
-            # 1. Get the lesson
-            lesson = await lesson_service.get_lesson_by_id(lesson_id)
-            if not lesson:
-                print(
-                    f"Lesson {lesson_id} not found during background audio generation."
-                )
-                return
-
-            if lesson.audio_transcript_url:
-                print(f"Audio already exists for lesson {lesson_id}.")
-                return
-
-            if not lesson.content:
-                print(
-                    f"Lesson content is empty for {lesson_id}, cannot generate audio."
-                )
-                return
-
-            # Convert content to lecture script
-            print(f"Converting content to lecture script for lesson {lesson_id}...")
-            lecture_script = await lecture_conversion_service.convert_to_lecture(
-                lesson.content
-            )
-
-            # Generate audio bytes
-            print(f"Generating audio for lesson {lesson_id}...")
-            audio_bytes = await audio_generation_service.generate_audio(lecture_script)
-
-            # Upload to Firebase
-            print(f"Uploading audio for lesson {lesson_id}...")
-            audio_url = firebase_storage_service.upload_audio(
-                audio_data=audio_bytes, folder="generated_audio"
-            )
-
-            # Update lesson with audio URL
-            updated_lesson = await lesson_service.update_lesson(
-                lesson_id=lesson_id, lesson_update={"audio_transcript_url": audio_url}
-            )
-            print(f"Audio generated and saved: {audio_url}")
-
-        except Exception as e:
-            traceback.print_exc()
-            print(f"Failed to generate audio for lesson {lesson_id}: {str(e)}")
-
-
 @router.post(
     "/user/lessons/unlock-audio", response_model=ApiResponse[UserLessonResponse]
 )
@@ -576,6 +525,13 @@ async def unlock_audio(
                 detail="Lesson not found",
             )
 
+        # 4. Unlock audio for user
+        user_lesson = await service.unlock_audio(
+            user_id=current_user.id,
+            lesson_id=lesson_id,
+        )
+        await session.commit()
+
         # 3. Check and generate audio if missing
         message = "Audio unlocked successfully"
         audio_url = None
@@ -590,12 +546,6 @@ async def unlock_audio(
             # Trigger background generation
             background_tasks.add_task(generate_audio_background, lesson_id)
             message = "Audio is being prepared. Please check back shortly."
-
-        # 4. Unlock audio for user
-        user_lesson = await service.unlock_audio(
-            user_id=current_user.id,
-            lesson_id=lesson_id,
-        )
 
         # Prepare response with audio URL
         response = UserLessonResponse.model_validate(user_lesson)
@@ -681,4 +631,44 @@ async def complete_lesson(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to complete lesson: {str(e)}",
+        )
+
+
+@router.post(
+    "/{lesson_id}/generate-audio", response_model=ApiResponse[LessonDetailResponse]
+)
+async def generate_audio(
+    lesson_id: int,
+    bg: BackgroundTasks,
+    session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Generate and save audio transcript for a lesson.
+
+    **Authentication required.**
+    """
+    try:
+        service = LessonService(session)
+        lesson = await service.get_lesson_by_id(lesson_id)
+
+        if not lesson:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Lesson not found",
+            )
+
+        bg.add_task(generate_audio_background, lesson_id)
+
+        return success_response(
+            data=lesson,
+            details="Audio generation started in background",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate audio: {str(e)}",
         )
