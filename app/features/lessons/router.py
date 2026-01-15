@@ -544,7 +544,9 @@ async def unlock_audio(
                 )
 
             # Trigger background generation
-            background_tasks.add_task(generate_audio_background, lesson_id)
+            background_tasks.add_task(
+                generate_audio_background, lesson_id=lesson_id, session=session
+            )
             message = "Audio is being prepared. Please check back shortly."
 
         # Prepare response with audio URL
@@ -658,7 +660,7 @@ async def generate_audio(
                 detail="Lesson not found",
             )
 
-        bg.add_task(generate_audio_background, lesson_id)
+        bg.add_task(generate_audio_background, lesson_id=lesson_id, session=session)
 
         return success_response(
             data=lesson,

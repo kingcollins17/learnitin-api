@@ -1,6 +1,6 @@
 """Course API endpoints."""
 
-from fastapi import APIRouter, Depends, status, HTTPException, Query
+from fastapi import APIRouter, Depends, status, HTTPException, Query, BackgroundTasks
 from typing import List
 import traceback
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +32,7 @@ from app.features.courses.service import (
     SubCategoryService,
 )
 from app.features.courses.generation_service import CourseGenerationService
+from app.features.courses.tasks import generate_course_image_background
 
 router = APIRouter()
 
@@ -363,6 +364,7 @@ async def get_courses(
 @router.get("/{course_id}", response_model=ApiResponse[CourseDetailResponse])
 async def get_course_detail(
     course_id: int,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_async_session),
 ):
     """
@@ -383,6 +385,12 @@ async def get_course_detail(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Course not found",
+            )
+
+        # Generate image in background if it's missing
+        if not course.image_url:
+            background_tasks.add_task(
+                generate_course_image_background, course_id, session
             )
 
         return success_response(

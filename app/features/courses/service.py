@@ -64,29 +64,11 @@ class CourseService:
             level=CourseLevel.BEGINNER,
         )
 
-        # Generate Course Image
-        try:
-            # Create a descriptive prompt for the image
-            prompt = f"Abstract, modern, high quality cover image for an online course titled '{course_data.title}'. Context: {course_data.description[:200]}"
-            print(f"Generating course image with prompt: {prompt}")
-
-            image_bytes = await image_generation_service.generate_image(prompt)
-
-            if image_bytes:
-                filename = f"courses/{user_id}/{uuid.uuid4()}.png"
-                # Upload to firebase
-                image_url = firebase_storage_service.upload_bytes(
-                    data=image_bytes,
-                    destination_path=filename,
-                    content_type="image/png",
-                )
-                course.image_url = image_url
-                print(f"Course image generated and uploaded to: {image_url}")
-        except Exception as e:
-            print(f"Failed to generate course image: {e}")
-            # Continue without image if generation fails
-
         course = await self.repository.create(course)
+
+        # Generate Course Image
+        if course.id:
+            await self.generate_course_image(course.id)
 
         # 2. Create Modules and Lessons
         for i, module_data in enumerate(course_data.outline):
@@ -117,6 +99,49 @@ class CourseService:
                 await self.lesson_repository.create(lesson)
 
         return course
+
+    async def generate_course_image(self, course_id: int) -> Optional[str]:
+        """
+        Generate, upload and update a course with an image.
+
+        Args:
+            course_id: ID of the course to update
+
+        Returns:
+            The generated image URL or None if failed
+        """
+        try:
+            # Fetch course from database
+            course = await self.repository.get_by_id(course_id)
+            if not course:
+                print(f"Course not found for image generation: {course_id}")
+                return None
+
+            # Create a descriptive prompt for the image
+            prompt = f"Abstract, modern, high quality cover image for an online course titled '{course.title}'. Context: {course.description[:200] if course.description else ''}"
+            print(f"Generating course image with prompt: {prompt}")
+
+            image_bytes = await image_generation_service.generate_image(prompt)
+
+            if image_bytes:
+                filename = f"courses/{course.user_id}/{uuid.uuid4()}.png"
+                # Upload to firebase
+                image_url = firebase_storage_service.upload_bytes(
+                    data=image_bytes,
+                    destination_path=filename,
+                    content_type="image/png",
+                )
+                course.image_url = image_url
+
+                # Update the course in the database
+                await self.repository.update(course)
+
+                print(f"Course image generated and uploaded to: {image_url}")
+                return image_url
+        except Exception as e:
+            print(f"Failed to generate course image: {e}")
+
+        return None
 
     async def enroll_course(self, user_id: int, course_id: int) -> UserCourse:
         """
