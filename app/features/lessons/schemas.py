@@ -108,12 +108,6 @@ class UserLessonBase(BaseModel):
     status: ProgressStatus = ProgressStatus.IN_PROGRESS
 
 
-class LessonStartRequest(BaseModel):
-    """Schema for starting a lesson."""
-
-    lesson_id: int
-
-
 class UserLessonCreate(BaseModel):
     """Schema for creating a user lesson record."""
 

@@ -27,7 +27,7 @@ from app.features.lessons.schemas import (
     UserLessonCreate,
     UserLessonUpdate,
     PaginatedUserLessonsResponse,
-    LessonStartRequest,
+    PaginatedUserLessonsResponse,
 )
 from app.features.lessons.service import LessonService, UserLessonService
 from app.features.lessons.lecture_service import lecture_conversion_service
@@ -230,9 +230,9 @@ async def delete_lesson(
 # UserLesson Endpoints
 
 
-@router.post("/start", response_model=ApiResponse[UserLessonResponse])
+@router.post("/{lesson_id}/start", response_model=ApiResponse[UserLessonResponse])
 async def start_lesson(
-    request: LessonStartRequest,
+    lesson_id: int,
     session: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -246,7 +246,7 @@ async def start_lesson(
 
         # 1. Fetch lesson details first to get context (module_id, course_id)
         lesson_service = LessonService(session)
-        lesson = await lesson_service.get_lesson_by_id(request.lesson_id)
+        lesson = await lesson_service.get_lesson_by_id(lesson_id)
 
         if not lesson:
             raise HTTPException(
@@ -259,7 +259,7 @@ async def start_lesson(
         # 2. Start the lesson (create record)
         user_lesson = await user_lesson_service.start_lesson(
             user_id=current_user.id,
-            lesson_id=request.lesson_id,
+            lesson_id=lesson_id,
             module_id=lesson.module_id,
             course_id=lesson.course_id,
         )
@@ -267,15 +267,13 @@ async def start_lesson(
         # 3. Check and generate content if missing
         await check_and_generate_lesson_content(
             session=session,
-            lesson_id=request.lesson_id,
+            lesson_id=lesson_id,
             module_id=lesson.module_id,
             course_id=lesson.course_id,
         )
 
-        # 4. Unlock lesson automatically
-        user_lesson = await user_lesson_service.unlock_lesson(
-            user_id=current_user.id, lesson_id=request.lesson_id
-        )
+        # 4. Unlock lesson automatically (NOTE: service already does this on creation, but if we updated existing, it's also handled there)
+        # We can just return user_lesson now as service handles unlocking logic.
 
         return success_response(
             data=user_lesson,

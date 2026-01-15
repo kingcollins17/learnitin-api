@@ -237,10 +237,11 @@ class UserLessonService:
         existing = await self.repository.get_by_user_and_lesson(user_id, lesson_id)
 
         if existing:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="User has already started this lesson",
-            )
+            if not existing.is_lesson_unlocked:
+                existing.is_lesson_unlocked = True
+                existing.updated_at = datetime.now(timezone.utc)
+                await self.repository.update(existing)
+            return existing
 
         # Check and start module if needed
         # We try to get the user module directly to see if it exists
@@ -288,6 +289,7 @@ class UserLessonService:
             module_id=module_id,
             course_id=course_id,
             status=ProgressStatus.IN_PROGRESS,
+            is_lesson_unlocked=True,  # Auto-unlock on start
         )
 
         created_user_lesson = await self.repository.create(user_lesson)
