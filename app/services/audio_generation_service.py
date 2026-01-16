@@ -2,16 +2,13 @@
 
 import asyncio
 import mimetypes
-import os
 import struct
-from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 from google import genai
 from google.genai import types
 
 from app.common.config import settings
-from app.common.google_credentials import setup_google_adc
 
 
 class AudioGenerationService:
@@ -19,7 +16,6 @@ class AudioGenerationService:
 
     def __init__(self):
         self.api_key = settings.GEMINI_API_KEY
-        setup_google_adc()
         if not self.api_key:
             print("Warning: GEMINI_API_KEY not set")
 
@@ -38,28 +34,17 @@ class AudioGenerationService:
         )
 
     def _generate_audio_sync(self, text: str) -> bytes:
-        # Try both backends if possible
-        client = None
+        if not self.api_key:
+            raise ValueError("GEMINI_API_KEY is not set")
+
         model = "gemini-2.5-pro-preview-tts"
 
-        # 1. Try Vertex AI if ADC is available
-        if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
-            try:
-                client = genai.Client(vertexai=True)
-                print("Using Vertex AI backend for audio generation")
-            except Exception as e:
-                print(f"Vertex AI initialization failed for audio: {e}")
-                client = None
-
-        # 2. Fallback to Google AI (API Key) if Vertex failed or was not available
-        if not client:
-            if not self.api_key:
-                raise ValueError(
-                    "Neither GEMINI_API_KEY nor GOOGLE_APPLICATION_CREDENTIALS is set"
-                )
-
-            client = genai.Client(api_key=self.api_key)
+        try:
+            client = genai.Client(api_key=self.api_key, vertexai=False)
             print("Using Google AI (API Key) backend for audio generation")
+        except Exception as e:
+            print(f"Google AI (API Key) initialization failed: {e}")
+            return b""
 
         contents = [
             types.Content(
@@ -103,34 +88,37 @@ class AudioGenerationService:
         last_mime_type = None
         is_raw_pcm = False
 
-        # Iterate through the stream and collect data
-        for chunk in client.models.generate_content_stream(
-            model=model,
-            contents=contents,
-            config=generate_content_config,
-        ):
-            if (
-                chunk.candidates is None
-                or not chunk.candidates
-                or chunk.candidates[0].content is None
-                or chunk.candidates[0].content.parts is None
-                or not chunk.candidates[0].content.parts
+        try:
+            # Iterate through the stream and collect data
+            for chunk in client.models.generate_content_stream(
+                model=model,
+                contents=contents,
+                config=generate_content_config,
             ):
-                continue
+                if (
+                    chunk.candidates is None
+                    or not chunk.candidates
+                    or chunk.candidates[0].content is None
+                    or chunk.candidates[0].content.parts is None
+                    or not chunk.candidates[0].content.parts
+                ):
+                    continue
 
-            part = chunk.candidates[0].content.parts[0]
-            if part.inline_data and part.inline_data.data:
-                inline_data = part.inline_data
-                current_mime_type = inline_data.mime_type
+                part = chunk.candidates[0].content.parts[0]
+                if part.inline_data and part.inline_data.data:
+                    inline_data = part.inline_data
+                    current_mime_type = inline_data.mime_type
 
-                # Determine if this is raw PCM or something else based on mime
-                # The snippet logic: guess_extension returns None -> convert_to_wav
-                ext = mimetypes.guess_extension(current_mime_type)
-                if ext is None:
-                    is_raw_pcm = True
-                    last_mime_type = current_mime_type
+                    # Determine if this is raw PCM or something else based on mime
+                    ext = mimetypes.guess_extension(current_mime_type)
+                    if ext is None:
+                        is_raw_pcm = True
+                        last_mime_type = current_mime_type
 
-                combined_data.extend(inline_data.data)
+                    combined_data.extend(inline_data.data)
+        except Exception as e:
+            print(f"Error during generate_content_stream: {e}")
+            return b""
 
         if not combined_data:
             return b""
@@ -138,7 +126,8 @@ class AudioGenerationService:
         # If it was raw PCM, we need to add the WAV header based on the mime type parameters
         if is_raw_pcm:
             return self._convert_to_wav(
-                combined_data, last_mime_type or "audio/L16;rate=24000"
+                bytes(combined_data),
+                last_mime_type or "audio/L16;rate=24000",
             )
 
         # Otherwise return the accumulated data (e.g. if it was mp3)
@@ -193,12 +182,7 @@ class AudioGenerationService:
                     pass
             elif param.startswith("audio/L"):
                 try:
-                    # e.g. audio/L16
-                    # split 'audio/L' from '16'
-                    # Actually snippet does: param.split("L", 1)[1]
-                    # But param is like "audio/L16"
                     rest = param.split("L", 1)[1]
-                    # rest would be "16"
                     bits_per_sample = int(rest)
                 except (ValueError, IndexError):
                     pass

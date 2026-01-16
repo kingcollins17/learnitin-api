@@ -1,16 +1,12 @@
 """Service for generating images using Gemini."""
 
 import asyncio
-import os
-import tempfile
-import json
 from typing import Optional
 
 from google import genai
 from google.genai import types
 
 from app.common.config import settings
-from app.common.google_credentials import setup_google_adc
 
 
 class ImageGenerationService:
@@ -18,7 +14,6 @@ class ImageGenerationService:
 
     def __init__(self):
         self.api_key = settings.GEMINI_API_KEY
-        setup_google_adc()
         if not self.api_key:
             print("Warning: GEMINI_API_KEY not set")
 
@@ -37,30 +32,17 @@ class ImageGenerationService:
         )
 
     def _generate_image_sync(self, prompt: str) -> Optional[bytes]:
-        # Try both backends if possible
-        client = None
+        if not self.api_key:
+            raise ValueError("GEMINI_API_KEY is not set")
+
         model = "gemini-3-pro-image-preview"
 
-        # 1. Try Vertex AI if ADC is available
-        if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
-            try:
-                # For Vertex AI, we need project ID. It can be inferred from ADC if not provided
-                # but we can also try to find it in the credentials
-                client = genai.Client(vertexai=True)
-                print("Using Vertex AI backend for image generation")
-            except Exception as e:
-                print(f"Vertex AI initialization failed: {e}")
-                client = None
-
-        # 2. Fallback to Google AI (API Key) if Vertex failed or was not available
-        if not client:
-            if not self.api_key:
-                raise ValueError(
-                    "Neither GEMINI_API_KEY nor GOOGLE_APPLICATION_CREDENTIALS is set"
-                )
-
-            client = genai.Client(api_key=self.api_key)
+        try:
+            client = genai.Client(api_key=self.api_key, vertexai=False)
             print("Using Google AI (API Key) backend for image generation")
+        except Exception as e:
+            print(f"Google AI (API Key) initialization failed: {e}")
+            return None
 
         contents = [
             types.Content(
@@ -107,9 +89,6 @@ class ImageGenerationService:
 
         except Exception as e:
             print(f"Error during generate_content: {e}")
-            # If it failed with the preview model, maybe fallback to a stable one?
-            # model = "imagen-3.0-generate-001"
-            # But we leave it for now.
 
         return None
 
