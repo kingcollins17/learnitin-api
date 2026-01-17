@@ -9,6 +9,7 @@ from google import genai
 from google.genai import types
 
 from app.common.config import settings
+from app.services.audio_conversion_service import pcm_to_mp3_bytes
 
 
 class AudioGenerationService:
@@ -125,12 +126,14 @@ class AudioGenerationService:
 
         # If it was raw PCM, we need to add the WAV header based on the mime type parameters
         if is_raw_pcm:
+            print("Is raw pcm")
             return self._convert_to_wav(
                 bytes(combined_data),
                 last_mime_type or "audio/L16;rate=24000",
             )
 
         # Otherwise return the accumulated data (e.g. if it was mp3)
+        print("Generated audio is mp3")
         return bytes(combined_data)
 
     def _convert_to_wav(self, audio_data: bytes, mime_type: str) -> bytes:
@@ -162,6 +165,77 @@ class AudioGenerationService:
             data_size,  # Subchunk2Size
         )
         return header + audio_data
+
+    def _convert_pcm_to_mp3(
+        self,
+        pcm_bytes: bytes,
+        sample_rate: int = 24000,
+        channels: int = 1,
+        bitrate: str = "128k",
+    ) -> bytes:
+        """
+        Convert raw PCM bytes to MP3 format.
+
+        Args:
+            pcm_bytes: Raw PCM audio data
+            sample_rate: Audio sample rate in Hz
+            channels: Number of audio channels
+            bitrate: MP3 output bitrate
+
+        Returns:
+            MP3 encoded audio data as bytes
+        """
+        return pcm_to_mp3_bytes(
+            pcm_bytes=pcm_bytes,
+            sample_rate=sample_rate,
+            channels=channels,
+            bitrate=bitrate,
+        )
+
+    async def generate_audio_mp3(
+        self, text: str, sample_rate: int = 24000, bitrate: str = "128k"
+    ) -> bytes:
+        """
+        Generates audio in MP3 format from the given text.
+
+        Args:
+            text: The text to convert to speech.
+            sample_rate: Audio sample rate (default: 24000 Hz)
+            bitrate: MP3 bitrate (default: "128k")
+
+        Returns:
+            The generated audio data as bytes (MP3 format).
+        """
+        # First generate the audio (which may be PCM or MP3)
+        audio_data = await self.generate_audio(text)
+
+        # Check if it's already MP3 by looking at the header
+        # MP3 files typically start with ID3 tag or sync word (0xFF 0xFB/0xFA)
+        if len(audio_data) > 3 and (
+            audio_data[:3] == b"ID3"
+            or (audio_data[0] == 0xFF and audio_data[1] & 0xE0 == 0xE0)
+        ):
+            # Already MP3
+            return audio_data
+
+        # If it's WAV, we need to extract the PCM data and convert
+        if audio_data[:4] == b"RIFF":
+            # Extract PCM data from WAV (skip 44-byte header)
+            pcm_data = audio_data[44:]
+            return self._convert_pcm_to_mp3(
+                pcm_bytes=pcm_data,
+                sample_rate=sample_rate,
+                channels=1,
+                bitrate=bitrate,
+            )
+
+        # If it's raw PCM (no header), convert directly
+        return self._convert_pcm_to_mp3(
+            pcm_bytes=audio_data,
+            sample_rate=sample_rate,
+            channels=1,
+            bitrate=bitrate,
+        )
 
     def _parse_audio_mime_type(self, mime_type: str) -> dict[str, Optional[int]]:
         """Parses bits per sample and rate from an audio MIME type string."""

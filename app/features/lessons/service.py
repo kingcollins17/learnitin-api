@@ -73,8 +73,10 @@ class LessonService:
             lesson.content
         )
 
-        # Generate audio bytes
-        audio_bytes = await audio_generation_service.generate_audio(lecture_script)
+        # Generate audio bytes in MP3 format
+        audio_bytes = await audio_generation_service.generate_audio_mp3(
+            text=lecture_script, sample_rate=24000, bitrate="128k"
+        )
 
         # Upload to Firebase
         audio_url = firebase_storage_service.upload_audio(

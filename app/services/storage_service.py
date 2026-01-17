@@ -97,22 +97,45 @@ class FirebaseStorageService:
         """
         Helper to upload audio data specifically.
 
+        Auto-detects audio format (WAV or MP3) based on file headers.
+
         Args:
-            audio_data: Bytes of the audio file (e.g., WAV).
+            audio_data: Bytes of the audio file (WAV or MP3).
             filename_prefix: Prefix for the filename.
             folder: The subfolder to save the file in.
 
         Returns:
             Public URL.
         """
-        filename = f"{filename_prefix}_{uuid.uuid4()}.wav"
+        # Detect audio format based on file header
+        if len(audio_data) >= 4:
+            # Check for WAV (RIFF header)
+            if audio_data[:4] == b"RIFF":
+                extension = "wav"
+                content_type = "audio/wav"
+            # Check for MP3 (ID3 tag or sync word)
+            elif audio_data[:3] == b"ID3" or (
+                audio_data[0] == 0xFF and audio_data[1] & 0xE0 == 0xE0
+            ):
+                extension = "mp3"
+                content_type = "audio/mpeg"
+            else:
+                # Default to WAV if unknown
+                extension = "wav"
+                content_type = "audio/wav"
+        else:
+            # Default to WAV for very small files
+            extension = "wav"
+            content_type = "audio/wav"
+
+        filename = f"{filename_prefix}_{uuid.uuid4()}.{extension}"
         # Ensure proper path formation without double slashes if folder is empty
         if folder:
             destination = f"{folder}/{filename}"
         else:
             destination = filename
 
-        return self.upload_bytes(audio_data, destination, "audio/wav")
+        return self.upload_bytes(audio_data, destination, content_type)
 
 
 # Singleton instance
