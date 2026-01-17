@@ -3,20 +3,28 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.common.config import settings
 from app.common.database.session import init_db, close_db
+from app.common.events.bus import event_bus
 from app.features.auth.router import router as auth_router
 from app.features.users.router import router as users_router
 from app.features.courses.router import router as courses_router
 from app.features.modules.router import router as modules_router
 from app.features.lessons.router import router as lessons_router
+from app.features.notifications.router import router as notifications_router
+from app.features.notifications.websocket_manager import notification_manager
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
-    # Startup: Initialize database
+    # Startup: Initialize database and event bus
     await init_db()
+    event_bus.start()
+
+    # Initialize real-time notification manager subscription
+    notification_manager.subscribe_to_bus()
     yield
-    # Shutdown: Close database connections
+    # Shutdown: Close database connections and stop event bus
+    await event_bus.stop()
     await close_db()
 
 
@@ -51,6 +59,11 @@ app.include_router(
 )
 app.include_router(
     lessons_router, prefix=f"{settings.API_V1_PREFIX}/lessons", tags=["Lessons"]
+)
+app.include_router(
+    notifications_router,
+    prefix=f"{settings.API_V1_PREFIX}/notifications",
+    tags=["Notifications"],
 )
 
 

@@ -24,9 +24,7 @@ from app.features.lessons.schemas import (
     PaginatedLessonsResponse,
     UserLessonResponse,
     UserLessonCreate,
-    UserLessonCreate,
     UserLessonUpdate,
-    PaginatedUserLessonsResponse,
     PaginatedUserLessonsResponse,
     LessonAudioResponse,
 )
@@ -548,7 +546,10 @@ async def unlock_audio(
 
             # Trigger background generation
             background_tasks.add_task(
-                generate_audio_background, lesson_id=lesson_id, session=session
+                generate_audio_background,
+                lesson_id=lesson_id,
+                session=session,
+                user_id=current_user.id,
             )
             message = "Audio is being prepared. Please check back shortly."
 
@@ -665,7 +666,12 @@ async def generate_audio(
                 detail="Lesson not found",
             )
 
-        bg.add_task(generate_audio_background, lesson_id=lesson_id, session=session)
+        bg.add_task(
+            generate_audio_background,
+            lesson_id=lesson_id,
+            session=session,
+            user_id=current_user.id,
+        )
 
         return success_response(
             data=lesson,
@@ -678,4 +684,42 @@ async def generate_audio(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate audio: {str(e)}",
+        )
+
+
+@router.get(
+    "/{lesson_id}/audios", response_model=ApiResponse[List[LessonAudioResponse]]
+)
+async def get_lesson_audios(
+    lesson_id: int,
+    session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Get all audio segments for a lesson.
+
+    **Access Restricted:**
+    - Must have started the lesson (UserLesson record exists).
+    - Audio must be unlocked for the user.
+
+    **Authentication required.**
+    """
+    try:
+        assert current_user.id
+        service = LessonService(session)
+        audios = await service.get_lesson_audios(
+            user_id=current_user.id, lesson_id=lesson_id
+        )
+
+        return success_response(
+            data=audios,
+            details=f"Retrieved {len(audios)} audio segment(s)",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch lesson audios: {str(e)}",
         )

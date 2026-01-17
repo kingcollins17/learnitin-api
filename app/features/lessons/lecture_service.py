@@ -49,7 +49,7 @@ Speaker 2: [Text]
 8. Be comprehensive - explain concepts fully with examples, analogies, and real-world applications.
 9. Ensure smooth transitions between topics.
 10. The script should feel complete and educational, like a full podcast episode.
-11. **CRITICAL: The TOTAL output must be 3000 words maximum.** If the source content is extremely long, prioritize the most important concepts.
+11. **CRITICAL: The TOTAL output must be 1500 words maximum.** If the source content is extremely long, prioritize the most important concepts.
 """
 
         user_prompt = """Convert the following lesson content into a comprehensive lecture script:
@@ -57,7 +57,7 @@ Speaker 2: [Text]
 {lesson_content}
 
 Create an in-depth, thorough lecture that covers all the important concepts with clear explanations.
-Remember: The total output must not exceed 3000 words.
+Remember: The total output must not exceed 1500 words.
 """
 
         lecture_script = await self.ai_service.invoke(

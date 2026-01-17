@@ -14,6 +14,7 @@ from app.features.users.schemas import (
     UserUpdate,
     UserResponse,
     UserVerifyRequest,
+    DeviceTokenUpdate,
 )
 from app.features.users.service import UserService
 from app.features.auth.otp_service import OTPService
@@ -199,4 +200,29 @@ async def verify_user(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to verify user: {str(e)}",
+        )
+
+
+@router.put("/me/device-token", response_model=ApiResponse[UserResponse])
+async def update_device_token(
+    data: DeviceTokenUpdate,
+    session: AsyncSession = Depends(get_async_session),
+    current_user: UserModel = Depends(get_current_active_user),
+):
+    """
+    Update the current user's device registration token for push notifications (FCM).
+    """
+    try:
+        assert current_user.id
+        service = UserService(session)
+        user = await service.update_device_token(current_user.id, data.device_reg_token)
+        await session.commit()
+        return success_response(data=user, details="Device token updated successfully")
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update device token: {str(e)}",
         )

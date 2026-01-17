@@ -5,6 +5,7 @@ import json
 from sqlalchemy import desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
+from sqlalchemy.orm import selectinload
 from app.features.lessons.models import Lesson, UserLesson, LessonAudio
 
 
@@ -17,7 +18,9 @@ class LessonRepository:
     async def get_by_id(self, lesson_id: int) -> Optional[Lesson]:
         """Get lesson by ID."""
         result = await self.session.execute(
-            select(Lesson).where(Lesson.id == lesson_id)
+            select(Lesson)
+            .where(Lesson.id == lesson_id)
+            .options(selectinload(Lesson.audios))
         )
         return result.scalar_one_or_none()
 

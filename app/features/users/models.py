@@ -2,7 +2,8 @@
 
 from datetime import datetime, timezone
 from typing import Optional
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, SQLModel, Column
+from sqlalchemy import Text
 
 
 class User(SQLModel, table=True):
@@ -19,8 +20,7 @@ class User(SQLModel, table=True):
     is_superuser: bool = Field(default=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default=None)
-    current_plan: Optional[str] = Field(default="free")
-    last_subscribed_at: Optional[datetime] = Field(default=None)
+    device_reg_token: Optional[str] = Field(default=None, sa_column=Column(Text))
 
     class Config:
         """Pydantic config."""

@@ -36,8 +36,6 @@ class UserResponse(UserBase):
     is_superuser: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
-    current_plan: Optional[str] = "free"
-    last_subscribed_datetime: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -51,3 +49,9 @@ class UserVerifyRequest(BaseModel):
     """Schema for verifying a user with OTP code."""
 
     code: str
+
+
+class DeviceTokenUpdate(BaseModel):
+    """Schema for updating user's device registration token."""
+
+    device_reg_token: str

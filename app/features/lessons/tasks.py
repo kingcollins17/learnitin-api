@@ -1,10 +1,14 @@
 import traceback
+from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.features.lessons.service import LessonService
 from app.features.lessons.repository import LessonAudioRepository
+from app.common.events import event_bus, Event, EventType
 
 
-async def generate_audio_background(lesson_id: int, session: AsyncSession):
+async def generate_audio_background(
+    lesson_id: int, session: AsyncSession, user_id: Optional[int] = None
+):
     """
     Background task to generate audio for a lesson.
     """
@@ -24,6 +28,19 @@ async def generate_audio_background(lesson_id: int, session: AsyncSession):
             print(
                 f"Audio parts already exist for lesson {lesson_id} ({len(existing_audios)} parts)."
             )
+            # Still publish completed if user is waiting
+            if user_id:
+                await event_bus.publish(
+                    Event(
+                        type=EventType.AUDIO_GENERATION_COMPLETED,
+                        payload={
+                            "user_id": user_id,
+                            "lesson_id": lesson_id,
+                            "title": lesson.title,
+                            "count": len(existing_audios),
+                        },
+                    )
+                )
             return
 
         if not lesson.content:
@@ -32,10 +49,39 @@ async def generate_audio_background(lesson_id: int, session: AsyncSession):
 
         print(f"Generating audio for lesson {lesson_id}...")
         created_audios = await lesson_service.generate_audio_from_content(lesson_id)
+
         print(
             f"Audio generation completed for lesson {lesson_id}: {len(created_audios)} parts created"
         )
 
+        # Publish completion event
+        if user_id:
+            await event_bus.publish(
+                Event(
+                    type=EventType.AUDIO_GENERATION_COMPLETED,
+                    payload={
+                        "user_id": user_id,
+                        "lesson_id": lesson_id,
+                        "title": lesson.title,
+                        "count": len(created_audios),
+                    },
+                )
+            )
+
     except Exception as e:
         traceback.print_exc()
-        print(f"Failed to generate audio for lesson {lesson_id}: {str(e)}")
+        error_msg = f"Failed to generate audio for lesson {lesson_id}: {str(e)}"
+        print(error_msg)
+
+        # Publish failure event
+        if user_id:
+            await event_bus.publish(
+                Event(
+                    type=EventType.AUDIO_GENERATION_FAILED,
+                    payload={
+                        "user_id": user_id,
+                        "lesson_id": lesson_id,
+                        "error": str(e),
+                    },
+                )
+            )

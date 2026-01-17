@@ -27,9 +27,50 @@ class LessonService:
         self.session = session
         self.repository = LessonRepository(session)
         self.audio_repo = LessonAudioRepository(session)
+        self.user_lesson_repo = UserLessonRepository(session)
         self.course_repo = CourseRepository(session)
         self.module_repo = ModuleRepository(session)
         self.generation_service = lesson_generation_service
+
+    async def get_lesson_audios(
+        self, user_id: int, lesson_id: int
+    ) -> List[LessonAudio]:
+        """
+        Get all audios for a lesson, restricted by user access.
+
+        Access is granted only if:
+        1. User has a UserLesson record
+        2. Audio is unlocked for that user (is_audio_unlocked = True)
+
+        Args:
+            user_id: ID of the user requesting
+            lesson_id: ID of the lesson
+
+        Returns:
+            List of LessonAudio records
+
+        Raises:
+            HTTPException: If access is denied or lesson not found
+        """
+        # 1. Check if user has access to this lesson's audio
+        user_lesson = await self.user_lesson_repo.get_by_user_and_lesson(
+            user_id, lesson_id
+        )
+
+        if not user_lesson:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You have not started this lesson yet.",
+            )
+
+        if not user_lesson.is_audio_unlocked:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Audio is locked for this lesson. Please unlock it first.",
+            )
+
+        # 2. Fetch and return audios
+        return await self.audio_repo.get_by_lesson_id(lesson_id)
 
     async def generate_content(self, lesson_id: int) -> Optional[Lesson]:
         """

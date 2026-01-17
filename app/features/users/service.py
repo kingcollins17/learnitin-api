@@ -54,6 +54,7 @@ class UserService:
     async def update_user(self, user_id: int, user_data: UserUpdate) -> User:
         """Update user information."""
         user = await self.get_user(user_id)
+        assert user is not None
 
         # At this point, user is guaranteed to be User (not None) because get_user raises exception if not found
         # Update fields if provided
@@ -116,4 +117,12 @@ class UserService:
         user.is_active = True
         user.updated_at = datetime.now(timezone.utc)
 
+        return await self.repository.update(user)
+
+    async def update_device_token(self, user_id: int, device_reg_token: str) -> User:
+        """Update user's device registration token."""
+        user = await self.get_user(user_id)
+        assert user is not None
+        user.device_reg_token = device_reg_token
+        user.updated_at = datetime.now(timezone.utc)
         return await self.repository.update(user)
