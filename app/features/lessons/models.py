@@ -29,13 +29,35 @@ class Lesson(SQLModel, table=True):
     content: Optional[str] = Field(
         default=None, sa_column=Column(LONGTEXT)
     )  # Markdown content (long text)
-    audio_transcript_url: Optional[str] = Field(default=None, sa_column=Column(Text))
-    has_quiz: bool = Field(default=False)
+    audios: list["LessonAudio"] = Relationship(back_populates="lesson")
     order: int = Field(default=0, nullable=False)  # Order within the module
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default=None)
 
     module: "Module" = Relationship(back_populates="lessons")
+
+    class Config:
+        """Pydantic config."""
+
+        from_attributes = True
+
+
+class LessonAudio(SQLModel, table=True):
+    """Lesson Audio model for database."""
+
+    __tablename__ = "lesson_audios"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    lesson_id: int = Field(foreign_key="lessons.id", nullable=False, index=True)
+    title: str = Field(nullable=False)
+    description: Optional[str] = Field(default=None, sa_column=Column(Text))
+    script: Optional[str] = Field(default=None, sa_column=Column(LONGTEXT))
+    audio_url: Optional[str] = Field(default=None, sa_column=Column(Text))
+    order: int = Field(default=0, nullable=False)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: Optional[datetime] = Field(default=None)
+
+    lesson: "Lesson" = Relationship(back_populates="audios")
 
     class Config:
         """Pydantic config."""

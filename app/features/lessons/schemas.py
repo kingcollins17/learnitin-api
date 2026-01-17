@@ -6,6 +6,23 @@ from datetime import datetime
 from app.features.courses.models import ProgressStatus
 
 
+class LessonAudioResponse(BaseModel):
+    """Schema for lesson audio responses."""
+
+    id: int
+    lesson_id: int
+    title: str
+    description: Optional[str] = None
+    script: Optional[str] = None
+    audio_url: Optional[str] = None
+    order: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
 class LessonBase(BaseModel):
     """Base lesson schema with common fields."""
 
@@ -13,8 +30,6 @@ class LessonBase(BaseModel):
     description: Optional[str] = None
     objectives: Optional[List[str]] = None
     # content is excluded from base to avoid sending it in lists
-    audio_transcript_url: Optional[str] = None
-    has_quiz: bool = False
     order: int = 0
 
 
@@ -33,8 +48,6 @@ class LessonUpdate(BaseModel):
     description: Optional[str] = None
     objectives: Optional[List[str]] = None
     content: Optional[str] = None  # Markdown content
-    audio_transcript_url: Optional[str] = None
-    has_quiz: Optional[bool] = None
     order: Optional[int] = None
 
 
@@ -85,6 +98,7 @@ class LessonDetailResponse(LessonResponse):
     """Schema for detailed lesson response including content."""
 
     content: Optional[str] = None  # Markdown content
+    audios: Optional[List[LessonAudioResponse]] = None  # Audio parts
 
 
 class PaginatedLessonsResponse(BaseModel):
@@ -143,7 +157,7 @@ class UserLessonResponse(BaseModel):
     status: ProgressStatus
     created_at: datetime
     updated_at: Optional[datetime] = None
-    audio_transcript_url: Optional[str] = None
+    audios: Optional[List[LessonAudioResponse]] = None  # Audio parts for this lesson
 
     class Config:
         from_attributes = True

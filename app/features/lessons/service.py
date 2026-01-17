@@ -4,8 +4,12 @@ from fastapi import HTTPException, status
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone
-from app.features.lessons.repository import LessonRepository, UserLessonRepository
-from app.features.lessons.models import Lesson, UserLesson
+from app.features.lessons.repository import (
+    LessonRepository,
+    UserLessonRepository,
+    LessonAudioRepository,
+)
+from app.features.lessons.models import Lesson, UserLesson, LessonAudio
 from app.features.courses.models import ProgressStatus
 from app.features.lessons.generation_service import lesson_generation_service
 from app.features.modules.repository import ModuleRepository, UserModuleRepository
@@ -22,6 +26,7 @@ class LessonService:
     def __init__(self, session: AsyncSession):
         self.session = session
         self.repository = LessonRepository(session)
+        self.audio_repo = LessonAudioRepository(session)
         self.course_repo = CourseRepository(session)
         self.module_repo = ModuleRepository(session)
         self.generation_service = lesson_generation_service
@@ -54,39 +59,72 @@ class LessonService:
         lesson.content = content
         return await self.repository.update(lesson)
 
-    async def generate_audio_from_content(self, lesson_id: int) -> Optional[Lesson]:
+    async def generate_audio_from_content(self, lesson_id: int) -> List[LessonAudio]:
         """
-        Generate audio from lesson content.
+        Generate audio from lesson content in multiple parts.
+
+        Converts lesson content into lecture script parts, generates audio for each part,
+        uploads to storage, and inserts records into the lesson_audios table.
 
         Args:
             lesson_id: ID of the lesson
 
         Returns:
-            Updated Lesson with audio_transcript_url or None if generation failed/invalid
+            List of created LessonAudio records, or empty list if generation failed
         """
         lesson = await self.get_lesson_by_id(lesson_id)
         if not lesson or not lesson.content:
-            return None
+            return []
 
-        # Convert content to lecture script
-        lecture_script = await lecture_conversion_service.convert_to_lecture(
-            lesson.content
+        # Generate lecture script parts
+        lecture_parts = await lecture_conversion_service.generate_lecture_parts(
+            lesson.content,
+            max_parts=4,
         )
 
-        # Generate audio bytes in MP3 format
-        audio_bytes = await audio_generation_service.generate_audio_mp3(
-            text=lecture_script, sample_rate=24000, bitrate="128k"
-        )
+        if not lecture_parts:
+            return []
 
-        # Upload to Firebase
-        audio_url = firebase_storage_service.upload_audio(
-            audio_data=audio_bytes, folder="generated_audio"
-        )
+        created_audios: List[LessonAudio] = []
 
-        # Update lesson with audio URL
-        return await self.update_lesson(
-            lesson_id=lesson_id, lesson_update={"audio_transcript_url": audio_url}
-        )
+        for part in lecture_parts:
+            try:
+                # Generate audio bytes in MP3 format for this part
+                audio_bytes = await audio_generation_service.generate_audio_mp3(
+                    text=part.script, sample_rate=24000, bitrate="128k"
+                )
+
+                # Upload to Firebase with descriptive folder structure
+                audio_url = firebase_storage_service.upload_audio(
+                    audio_data=audio_bytes,
+                    folder=f"lesson_audio/{lesson_id}",
+                )
+
+                # Create LessonAudio record
+                lesson_audio = LessonAudio(
+                    lesson_id=lesson_id,
+                    title=part.title,
+                    script=part.script,
+                    audio_url=audio_url,
+                    order=part.order,
+                )
+
+                created_audio = await self.audio_repo.create(lesson_audio)
+                await self.session.commit()
+                created_audios.append(created_audio)
+
+                print(
+                    f"✓ Generated audio part {part.order}: {part.title} ({len(part.script.split())} words)"
+                )
+
+            except Exception as e:
+                print(f"✗ Failed to generate audio for part {part.order}: {e}")
+                # Continue with other parts even if one fails
+                continue
+
+        print(f"Generated {len(created_audios)} audio parts for lesson {lesson_id}")
+
+        return created_audios
 
     async def update_content_markdown(
         self, lesson_id: int, content_update: str
@@ -483,30 +521,13 @@ class UserLessonService:
         Returns:
             Updated UserLesson object
         """
-        # Fetch lesson to check if it has a quiz
+        # Verify lesson exists
         lesson = await self.lesson_repo.get_by_id(lesson_id)
         if not lesson:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Lesson not found",
             )
-
-        if lesson.has_quiz:
-            # Check if user has completed the quiz
-            user_lesson = await self.repository.get_by_user_and_lesson(
-                user_id, lesson_id
-            )
-            if not user_lesson:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="User lesson progress not found",
-                )
-
-            if not user_lesson.is_quiz_completed:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="You must complete the lesson quiz before marking the lesson as completed.",
-                )
 
         return await self.update_user_lesson(
             user_id=user_id,

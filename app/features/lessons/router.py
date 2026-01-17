@@ -28,8 +28,10 @@ from app.features.lessons.schemas import (
     UserLessonUpdate,
     PaginatedUserLessonsResponse,
     PaginatedUserLessonsResponse,
+    LessonAudioResponse,
 )
 from app.features.lessons.service import LessonService, UserLessonService
+from app.features.lessons.repository import LessonAudioRepository
 from app.features.lessons.lecture_service import lecture_conversion_service
 from app.services.audio_generation_service import audio_generation_service
 from app.services.storage_service import firebase_storage_service
@@ -516,6 +518,7 @@ async def unlock_audio(
         assert current_user.id
         lesson_service = LessonService(session)
         service = UserLessonService(session)
+        audio_repo = LessonAudioRepository(session)
 
         # 1. Get the lesson
         lesson = await lesson_service.get_lesson_by_id(lesson_id)
@@ -525,18 +528,18 @@ async def unlock_audio(
                 detail="Lesson not found",
             )
 
-        # 4. Unlock audio for user
+        # 2. Unlock audio for user
         user_lesson = await service.unlock_audio(
             user_id=current_user.id,
             lesson_id=lesson_id,
         )
         await session.commit()
 
-        # 3. Check and generate audio if missing
+        # 3. Check for existing audio parts
+        existing_audios = await audio_repo.get_by_lesson_id(lesson_id)
         message = "Audio unlocked successfully"
-        audio_url = None
 
-        if not lesson.audio_transcript_url:
+        if not existing_audios:
             if not lesson.content:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -549,10 +552,12 @@ async def unlock_audio(
             )
             message = "Audio is being prepared. Please check back shortly."
 
-        # Prepare response with audio URL
+        # Prepare response with audio parts
         response = UserLessonResponse.model_validate(user_lesson)
-        # Use generated audio_url if we just made it, otherwise use existing one from lesson
-        response.audio_transcript_url = lesson.audio_transcript_url
+        # Include audio parts in response
+        response.audios = [
+            LessonAudioResponse.model_validate(audio) for audio in existing_audios
+        ]
 
         return success_response(
             data=response,
