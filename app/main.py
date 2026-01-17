@@ -11,6 +11,8 @@ from app.features.modules.router import router as modules_router
 from app.features.lessons.router import router as lessons_router
 from app.features.notifications.router import router as notifications_router
 from app.features.notifications.websocket_manager import notification_manager
+from app.features.notifications.handlers import handle_in_app_push_for_fcm
+from app.common.events import EventType
 
 
 @asynccontextmanager
@@ -22,6 +24,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize real-time notification manager subscription
     notification_manager.subscribe_to_bus()
+    event_bus.subscribe(EventType.NOTIFICATION_IN_APP_PUSH, handle_in_app_push_for_fcm)
     yield
     # Shutdown: Close database connections and stop event bus
     await event_bus.stop()
