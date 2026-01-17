@@ -11,6 +11,21 @@ from google.genai import types
 from app.common.config import settings
 from app.services.audio_conversion_service import pcm_to_mp3_bytes
 
+# Gemini TTS Content Limits
+# Official limit: 5,000 bytes per request
+# Practical safe limits based on testing and documentation
+MAX_BYTES_LIMIT = 5000  # Official API limit
+MAX_WORDS_SAFE = 500  # Safe limit to avoid truncation
+MAX_WORDS_ABSOLUTE = 750  # Absolute maximum observed before truncation
+MAX_CHARACTERS_SAFE = 2500  # Safe character limit (~500 words)
+MAX_CHARACTERS_ABSOLUTE = 3750  # Absolute maximum (~750 words)
+
+
+class ContentTooLongError(ValueError):
+    """Raised when content exceeds Gemini TTS limits."""
+
+    pass
+
 
 class AudioGenerationService:
     """Service for generating audio content."""
@@ -20,16 +35,66 @@ class AudioGenerationService:
         if not self.api_key:
             print("Warning: GEMINI_API_KEY not set")
 
-    async def generate_audio(self, text: str) -> bytes:
+    def validate_content_length(self, text: str, strict: bool = False) -> None:
+        """
+        Validate that text content is within Gemini TTS limits.
+
+        Args:
+            text: The text to validate
+            strict: If True, use safe limits. If False, use absolute limits.
+
+        Raises:
+            ContentTooLongError: If content exceeds the limits
+        """
+        byte_size = len(text.encode("utf-8"))
+        word_count = len(text.split())
+        char_count = len(text)
+
+        max_words = MAX_WORDS_SAFE if strict else MAX_WORDS_ABSOLUTE
+        max_chars = MAX_CHARACTERS_SAFE if strict else MAX_CHARACTERS_ABSOLUTE
+
+        errors = []
+
+        if byte_size > MAX_BYTES_LIMIT:
+            errors.append(
+                f"Content size ({byte_size} bytes) exceeds maximum limit of {MAX_BYTES_LIMIT} bytes"
+            )
+
+        if word_count > max_words:
+            errors.append(
+                f"Word count ({word_count}) exceeds {'safe' if strict else 'absolute'} limit of {max_words} words"
+            )
+
+        if char_count > max_chars:
+            errors.append(
+                f"Character count ({char_count}) exceeds {'safe' if strict else 'absolute'} limit of {max_chars} characters"
+            )
+
+        if errors:
+            error_msg = "Content too long for Gemini TTS:\n" + "\n".join(
+                f"  - {e}" for e in errors
+            )
+            error_msg += f"\n\nCurrent: {word_count} words, {char_count} chars, {byte_size} bytes"
+            error_msg += f"\nRecommended: Split content into chunks of ~{MAX_WORDS_SAFE} words or less"
+            raise ContentTooLongError(error_msg)
+
+    async def generate_audio(self, text: str, validate: bool = True) -> bytes:
         """
         Generates audio (WAV) from the given text.
 
         Args:
             text: The text to convert to speech.
+            validate: If True, validate content length before generation.
 
         Returns:
             The generated audio data as bytes (WAV format).
+
+        Raises:
+            ContentTooLongError: If content exceeds limits and validate=True
         """
+        if validate:
+            self.validate_content_length(text, strict=False)
+
         return await asyncio.get_event_loop().run_in_executor(
             None, self._generate_audio_sync, text
         )
@@ -193,7 +258,11 @@ class AudioGenerationService:
         )
 
     async def generate_audio_mp3(
-        self, text: str, sample_rate: int = 24000, bitrate: str = "128k"
+        self,
+        text: str,
+        sample_rate: int = 24000,
+        bitrate: str = "128k",
+        validate: bool = True,
     ) -> bytes:
         """
         Generates audio in MP3 format from the given text.
@@ -202,12 +271,22 @@ class AudioGenerationService:
             text: The text to convert to speech.
             sample_rate: Audio sample rate (default: 24000 Hz)
             bitrate: MP3 bitrate (default: "128k")
+            validate: If True, validate content length before generation.
 
         Returns:
             The generated audio data as bytes (MP3 format).
+
+        Raises:
+            ContentTooLongError: If content exceeds limits and validate=True
         """
+        # Validate content length if requested
+        if validate:
+            self.validate_content_length(text, strict=False)
+
         # First generate the audio (which may be PCM or MP3)
-        audio_data = await self.generate_audio(text)
+        audio_data = await self.generate_audio(
+            text, validate=False
+        )  # Already validated
 
         # Check if it's already MP3 by looking at the header
         # MP3 files typically start with ID3 tag or sync word (0xFF 0xFB/0xFA)

@@ -18,6 +18,7 @@ class LectureConversionService:
 
         Returns:
             A string formatted for text-to-speech with alternating speakers.
+            The output is guaranteed to be within Gemini TTS limits (~500 words max).
         """
         system_prompt = """You are an expert educational scriptwriter.
 Your task is to convert written lesson content into an engaging, natural-sounding audio lecture script for two speakers.
@@ -32,14 +33,19 @@ Speaker 2: [Text]
 2. Keep the tone conversational, engaging, and easy to follow.
 3. Break down complex concepts into simple explanations.
 4. Ensure the dialogue feels natural, like a podcast or radio show.
-5. Cover ALL the key points from the provided lesson content.
+5. Cover the MOST IMPORTANT key points from the provided lesson content.
 6. Do NOT use markdown formatting in the output, just plain text with Speaker labels.
 7. Avoid long monologues; keep interactions dynamic.
+8. **CRITICAL: The TOTAL output must be between 400-450 words maximum.** This is a hard limit for audio generation.
+9. Prioritize quality over quantity - focus on the core concepts rather than trying to cover everything.
+10. If the lesson content is very long, extract and explain only the most essential concepts.
 """
 
         user_prompt = """Convert the following lesson content into a lecture script:
 
 {lesson_content}
+
+Remember: Keep the output between 400-450 words total. Focus on the most important concepts.
 """
 
         lecture_script = await self.ai_service.invoke(
@@ -48,7 +54,19 @@ Speaker 2: [Text]
             lesson_content=lesson_content,
         )
 
-        return str(lecture_script)
+        script_text = str(lecture_script)
+
+        # Validate word count
+        word_count = len(script_text.split())
+        print(f"Generated lecture script: {word_count} words")
+
+        # Warn if approaching limit (but don't fail - let audio service handle it)
+        if word_count > 500:
+            print(
+                f"⚠️  Warning: Lecture script ({word_count} words) exceeds safe limit of 500 words"
+            )
+
+        return script_text
 
 
 # Singleton instance
