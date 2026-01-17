@@ -186,27 +186,3 @@ async def notification_websocket(
     except Exception:
         notification_manager.disconnect(user_id, websocket)
         await websocket.close()
-
-
-@router.post("/test-create", response_model=ApiResponse[NotificationResponse])
-async def test_create_notification(
-    notification_data: NotificationCreate,
-    session: AsyncSession = Depends(get_async_session),
-):
-    """
-    Test endpoint to create a notification for a user.
-    **UNPROTECTED** - For development/testing purposes only.
-    """
-    try:
-        service = NotificationService(session)
-        notification = await service.create_notification(notification_data)
-        await session.commit()
-        return success_response(
-            data=notification, details="Test notification created successfully"
-        )
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create test notification: {str(e)}",
-        )
