@@ -2,7 +2,11 @@ import logging
 import json
 from typing import Dict, Optional
 from fastapi import WebSocket, WebSocketDisconnect, status
-from app.common.events import event_bus, Event, EventType
+from app.common.events import (
+    event_bus,
+    AppEvent,
+    NotificationInAppPushEvent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,16 +29,9 @@ class WebsocketManager:
         """
         if not self._is_subscribed:
             # Main in-app push notifications
-            event_bus.subscribe(
-                EventType.NOTIFICATION_IN_APP_PUSH, self.handle_push_event
-            )
-            # Audio generation status updates
-            event_bus.subscribe(
-                EventType.AUDIO_GENERATION_COMPLETED, self.handle_push_event
-            )
-            event_bus.subscribe(
-                EventType.AUDIO_GENERATION_FAILED, self.handle_push_event
-            )
+            event_bus.on(
+                NotificationInAppPushEvent, self.handle_push_event
+            )  # ty:ignore[no-matching-overload]
             self._is_subscribed = True
             logger.info("WebsocketManager subscribed to Event Bus")
 
@@ -59,7 +56,9 @@ class WebsocketManager:
 
         await websocket.accept()
         self.active_connections[user_id] = websocket
-        logger.debug(f"User {user_id} connected to notifications WebSocket")
+        logger.info(
+            f"User {user_id} connected to notifications WebSocket. Total connections: {len(self.active_connections)}"
+        )
 
     def disconnect(self, user_id: int, websocket: WebSocket):
         """Clean up connection tracking."""
@@ -69,19 +68,26 @@ class WebsocketManager:
                 del self.active_connections[user_id]
         logger.debug(f"User {user_id} disconnected from notifications WebSocket")
 
-    async def handle_push_event(self, event: Event):
+    async def handle_push_event(self, event: AppEvent):
         """
         Handler for NOTIFICATION_IN_APP_PUSH events from the Event Bus.
         Dispatches the notification to the active connection for the target user.
         """
+        logger.info(
+            f"WebsocketManager.handle_push_event called with event: {event.event_type}"
+        )
         try:
-            payload = event.payload
+            payload = event.model_dump(mode="json")
             user_id = payload.get("user_id")
+            logger.info(
+                f"Event user_id: {user_id}. Active users: {list(self.active_connections.keys())}"
+            )
 
             if user_id and user_id in self.active_connections:
+                logger.info(f"Sending WS message to user {user_id}")
                 socket = self.active_connections[user_id]
                 # Include event type in the payload for the client
-                message_data = {**payload, "event_type": event.type}
+                message_data = {**payload, "event_type": event.event_type}
                 message = json.dumps(message_data)
                 try:
                     await socket.send_text(message)

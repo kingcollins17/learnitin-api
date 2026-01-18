@@ -8,7 +8,7 @@ from fastapi import HTTPException, status
 from .repository import NotificationRepository
 from .models import Notification, NotificationType
 from .schemas import NotificationCreate, NotificationUpdate
-from app.common.events import event_bus, Event, EventType
+from app.common.events import event_bus, NotificationInAppPushEvent
 
 
 class NotificationService:
@@ -42,19 +42,22 @@ class NotificationService:
 
         created_notification = await self.repository.create(notification)
 
+        # Check for in_app_event in data to pass it to the bus event
+        in_app_event = None
+        if notification_data.data and "in_app_event" in notification_data.data:
+            in_app_event = notification_data.data["in_app_event"]
+
         # Publish event for real-time delivery (WebSocket)
-        await event_bus.publish(
-            Event(
-                type=EventType.NOTIFICATION_IN_APP_PUSH,
-                payload={
-                    "user_id": created_notification.user_id,
-                    "notification_id": created_notification.id,
-                    "title": created_notification.title,
-                    "message": created_notification.message,
-                    "type": created_notification.type,
-                    "data": created_notification.data,
-                    "created_at": created_notification.created_at.isoformat(),
-                },
+        event_bus.dispatch(
+            NotificationInAppPushEvent(
+                user_id=created_notification.user_id,
+                notification_id=created_notification.id,
+                title=created_notification.title,
+                message=created_notification.message,
+                type=created_notification.type,
+                in_app_event=in_app_event,
+                data=created_notification.data,
+                created_at=created_notification.created_at.isoformat(),
             )
         )
 

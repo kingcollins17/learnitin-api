@@ -3,7 +3,14 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.features.lessons.service import LessonService
 from app.features.lessons.repository import LessonAudioRepository
-from app.common.events import event_bus, Event, EventType
+from datetime import datetime, timezone
+from app.common.events import (
+    event_bus,
+    AudioReadyEvent,
+    AudioGenerationFailedEvent,
+    NotificationInAppPushEvent,
+    InAppEventType,
+)
 
 
 async def generate_audio_background(
@@ -30,15 +37,24 @@ async def generate_audio_background(
             )
             # Still publish completed if user is waiting
             if user_id:
-                await event_bus.publish(
-                    Event(
-                        type=EventType.AUDIO_GENERATION_COMPLETED,
-                        payload={
-                            "user_id": user_id,
-                            "lesson_id": lesson_id,
-                            "title": lesson.title,
-                            "count": len(existing_audios),
-                        },
+                event_bus.dispatch(
+                    AudioReadyEvent(
+                        user_id=user_id,
+                        lesson_id=lesson_id,
+                        title=lesson.title,
+                        count=len(existing_audios),
+                    )
+                )
+                # Dispatch transient notification
+                event_bus.dispatch(
+                    NotificationInAppPushEvent(
+                        user_id=user_id,
+                        title="Audio Ready",
+                        message=f"Audio for '{lesson.title}' is ready to listen.",
+                        type="success",
+                        in_app_event=InAppEventType.AUDIO_READY,
+                        data={"lesson_id": lesson_id},
+                        created_at=datetime.now(timezone.utc).isoformat(),
                     )
                 )
             return
@@ -54,17 +70,27 @@ async def generate_audio_background(
             f"Audio generation completed for lesson {lesson_id}: {len(created_audios)} parts created"
         )
 
-        # Publish completion event
+        # Publish completion events
         if user_id:
-            await event_bus.publish(
-                Event(
-                    type=EventType.AUDIO_GENERATION_COMPLETED,
-                    payload={
-                        "user_id": user_id,
-                        "lesson_id": lesson_id,
-                        "title": lesson.title,
-                        "count": len(created_audios),
-                    },
+            # 1. Dispatch AudioReadyEvent
+            event_bus.dispatch(
+                AudioReadyEvent(
+                    user_id=user_id,
+                    lesson_id=lesson_id,
+                    title=lesson.title,
+                    count=len(created_audios),
+                )
+            )
+            # 2. Dispatch transient notification (WS only, not in DB)
+            event_bus.dispatch(
+                NotificationInAppPushEvent(
+                    user_id=user_id,
+                    title="Audio Ready",
+                    message=f"Audio for '{lesson.title}' is now ready to listen.",
+                    type="success",
+                    in_app_event=InAppEventType.AUDIO_READY,
+                    data={"lesson_id": lesson_id},
+                    created_at=datetime.now(timezone.utc).isoformat(),
                 )
             )
 
@@ -75,13 +101,10 @@ async def generate_audio_background(
 
         # Publish failure event
         if user_id:
-            await event_bus.publish(
-                Event(
-                    type=EventType.AUDIO_GENERATION_FAILED,
-                    payload={
-                        "user_id": user_id,
-                        "lesson_id": lesson_id,
-                        "error": str(e),
-                    },
+            event_bus.dispatch(
+                AudioGenerationFailedEvent(
+                    user_id=user_id,
+                    lesson_id=lesson_id,
+                    error=str(e),
                 )
             )

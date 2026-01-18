@@ -1,5 +1,47 @@
 from .bus import event_bus
-from .schemas import Event
-from .types import EventType
+from .schemas import (
+    InAppEventType,
+    AppEvent,
+    AuthRegisteredEvent,
+    AuthLoginEvent,
+    AuthPasswordResetRequestedEvent,
+    AuthEmailVerifiedEvent,
+    CourseCreatedEvent,
+    CourseUpdatedEvent,
+    CoursePublishedEvent,
+    CourseEnrolledEvent,
+    CourseCompletedEvent,
+    LessonCreateEvent,
+    LessonStartedEvent,
+    LessonCompletedEvent,
+    LessonContentGeneratedEvent,
+    AudioGenerationRequestedEvent,
+    AudioGenerationStartedEvent,
+    AudioReadyEvent,
+    AudioGenerationFailedEvent,
+    NotificationInAppPushEvent,
+)
 
-__all__ = ["event_bus", "Event", "EventType"]
+__all__ = [
+    "event_bus",
+    "InAppEventType",
+    "AppEvent",
+    "AuthRegisteredEvent",
+    "AuthLoginEvent",
+    "AuthPasswordResetRequestedEvent",
+    "AuthEmailVerifiedEvent",
+    "CourseCreatedEvent",
+    "CourseUpdatedEvent",
+    "CoursePublishedEvent",
+    "CourseEnrolledEvent",
+    "CourseCompletedEvent",
+    "LessonCreateEvent",
+    "LessonStartedEvent",
+    "LessonCompletedEvent",
+    "LessonContentGeneratedEvent",
+    "AudioGenerationRequestedEvent",
+    "AudioGenerationStartedEvent",
+    "AudioReadyEvent",
+    "AudioGenerationFailedEvent",
+    "NotificationInAppPushEvent",
+]

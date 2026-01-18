@@ -2,23 +2,22 @@
 
 import logging
 import asyncio
-from app.common.events import Event, EventType
+from app.common.events import NotificationInAppPushEvent
 from .tasks import send_push_notification_task
 
 logger = logging.getLogger(__name__)
 
 
-async def handle_in_app_push_for_fcm(event: Event):
+async def handle_in_app_push_for_fcm(event: NotificationInAppPushEvent):
     """
     Handler for NOTIFICATION_IN_APP_PUSH events.
     Triggers a Firebase Cloud Messaging push notification if the user has a device token.
     """
-    payload = event.payload
-    user_id = payload.get("user_id")
-    title = payload.get("title")
-    message = payload.get("message")
-    notification_id = payload.get("notification_id")
-    data = payload.get("data", {})
+    user_id = event.user_id
+    title = event.title
+    message = event.message
+    notification_id = event.notification_id
+    data = event.data or {}
 
     if user_id and title and message:
         # Trigger the push notification task

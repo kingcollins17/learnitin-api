@@ -147,6 +147,27 @@ async def delete_notification(
         )
 
 
+@router.post("/test-create", response_model=ApiResponse[NotificationResponse])
+async def test_create_notification(
+    notification_data: NotificationCreate,
+    session: AsyncSession = Depends(get_async_session),
+):
+    """
+    Unprotected endpoint to create a notification for testing.
+    """
+    try:
+        service = NotificationService(session)
+        notification = await service.create_notification(notification_data)
+        await session.commit()
+        return success_response(data=notification, details="Test notification created")
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create test notification: {str(e)}",
+        )
+
+
 @router.websocket("/ws")
 async def notification_websocket(
     websocket: WebSocket,
