@@ -305,108 +305,6 @@ async def get_user_course_detail(
         )
 
 
-# General course endpoints
-@router.get("", response_model=ApiResponse[PaginatedCoursesResponse])
-async def get_courses(
-    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
-    per_page: int = Query(10, ge=1, le=100, description="Items per page"),
-    is_public: bool | None = Query(None, description="Filter by public/private"),
-    level: str | None = Query(None, description="Filter by course level"),
-    category_id: int | None = Query(None, description="Filter by category ID"),
-    min_enrollees: int | None = Query(None, ge=0, description="Minimum enrollees"),
-    session: AsyncSession = Depends(get_async_session),
-):
-    """
-    Get all courses with pagination and optional filters.
-
-    **Query Parameters:**
-    - `page`: Page number (default: 1)
-    - `per_page`: Items per page (default: 10, max: 100)
-    - `is_public`: Filter by public courses (optional)
-    - `level`: Filter by course level (beginner, intermediate, expert) (optional)
-    - `min_enrollees`: Filter by minimum number of enrollees (optional)
-
-    **No authentication required** - returns public courses by default.
-    """
-    try:
-        service = CourseService(session)
-        courses = await service.get_courses(
-            page=page,
-            per_page=per_page,
-            is_public=is_public,
-            level=level,
-            category_id=category_id,
-            min_enrollees=min_enrollees,
-        )
-
-        # Convert SQLModel objects to Pydantic schemas
-        courses_response = [CourseResponse.model_validate(c) for c in courses]
-
-        response_data = PaginatedCoursesResponse(
-            courses=courses_response,
-            page=page,
-            per_page=per_page,
-            total=len(courses),
-        )
-
-        return success_response(
-            data=response_data,
-            details=f"Retrieved {len(courses)} course(s)",
-        )
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch courses: {str(e)}",
-        )
-
-
-@router.get("/{course_id}", response_model=ApiResponse[CourseDetailResponse])
-async def get_course_detail(
-    course_id: int,
-    background_tasks: BackgroundTasks,
-    session: AsyncSession = Depends(get_async_session),
-):
-    """
-    Get course detail with all modules and lessons.
-
-    Returns the complete course structure including:
-    - Course metadata
-    - All modules in order
-    - All lessons within each module
-
-    **No authentication required** for public courses.
-    """
-    try:
-        service = CourseService(session)
-        course = await service.get_course_detail(course_id)
-
-        if not course:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Course not found",
-            )
-
-        # Generate image in background if it's missing
-        if not course.image_url:
-            background_tasks.add_task(
-                generate_course_image_background, course_id, session
-            )
-
-        return success_response(
-            data=course,
-            details="Course details retrieved successfully",
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch course details: {str(e)}",
-        )
-
-
 # Category Endpoints
 
 
@@ -651,4 +549,106 @@ async def delete_subcategory(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete sub-category: {str(e)}",
+        )
+
+
+# General course endpoints
+@router.get("", response_model=ApiResponse[PaginatedCoursesResponse])
+async def get_courses(
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    per_page: int = Query(10, ge=1, le=100, description="Items per page"),
+    is_public: bool | None = Query(None, description="Filter by public/private"),
+    level: str | None = Query(None, description="Filter by course level"),
+    category_id: int | None = Query(None, description="Filter by category ID"),
+    min_enrollees: int | None = Query(None, ge=0, description="Minimum enrollees"),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """
+    Get all courses with pagination and optional filters.
+
+    **Query Parameters:**
+    - `page`: Page number (default: 1)
+    - `per_page`: Items per page (default: 10, max: 100)
+    - `is_public`: Filter by public courses (optional)
+    - `level`: Filter by course level (beginner, intermediate, expert) (optional)
+    - `min_enrollees`: Filter by minimum number of enrollees (optional)
+
+    **No authentication required** - returns public courses by default.
+    """
+    try:
+        service = CourseService(session)
+        courses = await service.get_courses(
+            page=page,
+            per_page=per_page,
+            is_public=is_public,
+            level=level,
+            category_id=category_id,
+            min_enrollees=min_enrollees,
+        )
+
+        # Convert SQLModel objects to Pydantic schemas
+        courses_response = [CourseResponse.model_validate(c) for c in courses]
+
+        response_data = PaginatedCoursesResponse(
+            courses=courses_response,
+            page=page,
+            per_page=per_page,
+            total=len(courses),
+        )
+
+        return success_response(
+            data=response_data,
+            details=f"Retrieved {len(courses)} course(s)",
+        )
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch courses: {str(e)}",
+        )
+
+
+@router.get("/{course_id}", response_model=ApiResponse[CourseDetailResponse])
+async def get_course_detail(
+    course_id: int,
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_async_session),
+):
+    """
+    Get course detail with all modules and lessons.
+
+    Returns the complete course structure including:
+    - Course metadata
+    - All modules in order
+    - All lessons within each module
+
+    **No authentication required** for public courses.
+    """
+    try:
+        service = CourseService(session)
+        course = await service.get_course_detail(course_id)
+
+        if not course:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Course not found",
+            )
+
+        # Generate image in background if it's missing
+        if not course.image_url:
+            background_tasks.add_task(
+                generate_course_image_background, course_id, session
+            )
+
+        return success_response(
+            data=course,
+            details="Course details retrieved successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch course details: {str(e)}",
         )
