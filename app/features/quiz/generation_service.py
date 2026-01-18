@@ -13,7 +13,7 @@ class QuizGenerationService:
         self.ai_service = langchain_service
 
     async def generate_quiz(
-        self, lesson: Lesson, question_count: int = 5
+        self, lesson: Lesson, question_count: int = 10
     ) -> QuizGenerationSchema:
         """
         Generate a quiz for a lesson using AI.
@@ -31,14 +31,14 @@ Focus on testing understanding of key concepts, practical application, and criti
 Ensure each question has exactly 4 options and one clearly correct answer.
 Provide a clear explanation for each answer."""
 
-        user_prompt = f"""Generate a quiz for the following lesson:
+        user_prompt = """Generate a quiz for the following lesson:
 
-Title: {lesson.title}
+Title: {title}
 Content:
-{lesson.content}
+{content}
 
 Requirements:
-- Number of questions: {question_count}
+- Number of questions: {count}
 - Each question must have 4 options.
 - The questions should cover different aspects of the lesson.
 - Provide a recommended duration in seconds based on the difficulty and number of questions.
@@ -48,6 +48,9 @@ Requirements:
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             response_schema=QuizGenerationSchema,
+            title=lesson.title,
+            content=lesson.content,
+            count=question_count,
         )
 
         return quiz_data  # type: ignore

@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 from typing import Optional, List, TYPE_CHECKING
 from sqlmodel import Field, SQLModel, Relationship
+from sqlalchemy import Column, Text
 
 if TYPE_CHECKING:
     from app.features.lessons.models import Lesson
@@ -42,12 +43,12 @@ class Question(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     quiz_id: int = Field(foreign_key="quizzes.id", nullable=False, index=True)
     lesson_id: int = Field(foreign_key="lessons.id", nullable=False, index=True)
-    question: str = Field(nullable=False)
-    option_1: Optional[str] = Field(default=None)
-    option_2: Optional[str] = Field(default=None)
-    option_3: Optional[str] = Field(default=None)
-    option_4: Optional[str] = Field(default=None)
-    explanation: Optional[str] = Field(default=None)
+    question: str = Field(sa_column=Column(Text, nullable=False))
+    option_1: Optional[str] = Field(default=None, sa_column=Column(Text))
+    option_2: Optional[str] = Field(default=None, sa_column=Column(Text))
+    option_3: Optional[str] = Field(default=None, sa_column=Column(Text))
+    option_4: Optional[str] = Field(default=None, sa_column=Column(Text))
+    explanation: Optional[str] = Field(default=None, sa_column=Column(Text))
     correct_option_index: int = Field(nullable=False)  # 1 to 4
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default=None)
