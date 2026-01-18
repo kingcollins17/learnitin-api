@@ -54,6 +54,7 @@ async def init_db() -> None:
     from app.features.courses.models import Course, Category, SubCategory  # noqa: F401
     from app.features.modules.models import Module  # noqa: F401
     from app.features.lessons.models import Lesson  # noqa: F401
+    from app.features.quiz.models import Quiz, Question  # noqa: F401
 
     # Add other model imports as you create them
 

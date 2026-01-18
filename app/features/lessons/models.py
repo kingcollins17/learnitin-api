@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from app.features.modules.models import Module
+    from app.features.quiz.models import Quiz
 
 from sqlalchemy import Text, UniqueConstraint
 from sqlalchemy.dialects.mysql import LONGTEXT
@@ -35,6 +36,9 @@ class Lesson(SQLModel, table=True):
     updated_at: Optional[datetime] = Field(default=None)
 
     module: "Module" = Relationship(back_populates="lessons")
+    quiz: Optional["Quiz"] = Relationship(
+        sa_relationship_kwargs={"uselist": False}, back_populates="lesson"
+    )
 
     class Config:
         """Pydantic config."""

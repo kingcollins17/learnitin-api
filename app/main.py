@@ -10,6 +10,7 @@ from app.features.courses.router import router as courses_router
 from app.features.modules.router import router as modules_router
 from app.features.lessons.router import router as lessons_router
 from app.features.notifications.router import router as notifications_router
+from app.features.quiz.router import router as quiz_router
 from app.features.notifications.websocket_manager import notification_manager
 from app.features.notifications.handlers import handle_in_app_push_for_fcm
 from app.common.events import NotificationInAppPushEvent
@@ -68,6 +69,11 @@ app.include_router(
     notifications_router,
     prefix=f"{settings.API_V1_PREFIX}/notifications",
     tags=["Notifications"],
+)
+app.include_router(
+    quiz_router,
+    prefix=f"{settings.API_V1_PREFIX}/quiz",
+    tags=["Quizzes"],
 )
 
 

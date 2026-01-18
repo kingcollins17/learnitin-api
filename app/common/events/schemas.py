@@ -97,6 +97,15 @@ class LessonContentGeneratedEvent(AppEvent):
     content: str
 
 
+# --- Quiz Events ---
+
+
+class QuizGeneratedEvent(AppEvent):
+    quiz_id: int
+    lesson_id: int
+    question_count: int
+
+
 # --- Audio Events ---
 
 
