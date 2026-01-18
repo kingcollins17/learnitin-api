@@ -24,6 +24,7 @@ from app.features.courses.schemas import (
     SubCategoryCreate,
     SubCategoryResponse,
     SubCategoryUpdate,
+    CoursePublishRequest,
 )
 from app.features.courses.models import UserCourse
 from app.features.courses.service import (
@@ -183,6 +184,58 @@ async def delete_course(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete course: {str(e)}",
+        )
+
+
+@router.post("/{course_id}/publish", response_model=ApiResponse[CourseResponse])
+async def publish_course(
+    course_id: int,
+    publish_data: CoursePublishRequest,
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Publish a course to make it public.
+
+    This endpoint updates the course to be public and assigns it to a category.
+    If the course doesn't have an image, one will be generated in the background.
+
+    **Authentication required** - only course creator can publish.
+    """
+    try:
+        assert current_user.id  # Ensure user has an ID
+        service = CourseService(session)
+
+        update_data = {
+            "category_id": publish_data.category_id,
+            "sub_category_id": publish_data.sub_category_id,
+            "is_public": True,
+        }
+
+        updated_course = await service.update_course(
+            user_id=current_user.id,
+            course_id=course_id,
+            course_update=update_data,
+        )
+
+        # Generate image in background if it's missing
+        if not updated_course.image_url:
+            background_tasks.add_task(
+                generate_course_image_background, course_id, session
+            )
+
+        return success_response(
+            data=updated_course,
+            details="Course published successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to publish course: {str(e)}",
         )
 
 

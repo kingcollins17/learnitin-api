@@ -161,6 +161,13 @@ class CourseUpdate(BaseModel):
     sub_category_id: Optional[int] = None
 
 
+class CoursePublishRequest(BaseModel):
+    """Schema for publishing a course."""
+
+    category_id: int
+    sub_category_id: Optional[int] = None
+
+
 class CourseResponse(CourseBase):
     """Schema for course responses."""
 
