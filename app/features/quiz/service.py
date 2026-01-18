@@ -20,7 +20,7 @@ class QuizService:
         self.question_repo = QuestionRepository(session)
 
     async def generate_and_save_quiz(
-        self, lesson: Lesson, question_count: int = 5
+        self, lesson: Lesson, question_count: int = 10
     ) -> Quiz:
         """
         Generate a quiz for a lesson, save it to database, and dispatch event.
@@ -38,7 +38,7 @@ class QuizService:
         quiz_data = await quiz_generation_service.generate_quiz(
             lesson=lesson, question_count=question_count
         )
-
+        print(f"Quiz generated for lesson {lesson.title}")
         # 2. Create Quiz record
         quiz = Quiz(
             lesson_id=lesson.id,
