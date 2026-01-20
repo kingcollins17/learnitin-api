@@ -241,6 +241,19 @@ class LessonService:
         """
         return await self.repository.get_by_id(lesson_id)
 
+    async def create_lesson(self, lesson_data: dict) -> Lesson:
+        """
+        Create a new lesson.
+
+        Args:
+            lesson_data: Dictionary containing lesson data
+
+        Returns:
+            Created Lesson object
+        """
+        lesson = Lesson(**lesson_data)
+        return await self.repository.create(lesson)
+
     async def update_lesson(self, lesson_id: int, lesson_update: dict) -> Lesson:
         """
         Update a lesson.
@@ -272,6 +285,26 @@ class LessonService:
         lesson.updated_at = datetime.now(timezone.utc)
 
         return await self.repository.update(lesson)
+
+    async def delete_lesson(self, lesson_id: int) -> None:
+        """
+        Delete a lesson.
+
+        Args:
+            lesson_id: ID of the lesson to delete
+
+        Raises:
+            HTTPException: If lesson not found
+        """
+        lesson = await self.repository.get_by_id(lesson_id)
+
+        if not lesson:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Lesson not found",
+            )
+
+        await self.repository.delete(lesson)
 
 
 class UserLessonService:

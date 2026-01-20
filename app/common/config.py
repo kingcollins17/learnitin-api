@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     FIREBASE_STORAGE_BUCKET: str = Field(default="")
     FIREBASE_CREDENTIALS_JSON: str = Field(default="")
 
+    # Google Play
+    GOOGLE_PLAY_PACKAGE_NAME: str = Field(default="com.antigravity.app")
+
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = Field(
         default=[
