@@ -21,6 +21,8 @@ from app.features.users.models import User
 from .service import NotificationService
 from .schemas import NotificationResponse, NotificationUpdate, NotificationCreate
 from .websocket_manager import notification_manager
+from app.common.events import event_bus, NotificationInAppPushEvent, InAppEventType
+import random
 
 router = APIRouter()
 
@@ -166,6 +168,59 @@ async def test_create_notification(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create test notification: {str(e)}",
         )
+
+
+@router.get("/test-fire", response_model=ApiResponse[dict])
+async def test_fire_notification():
+    """
+    Fire a random NotificationInAppPushEvent for testing.
+    """
+    titles = [
+        "New Course Available",
+        "Lesson Completed!",
+        "Streak Updated",
+        "Achievement Unlocked",
+        "Audio Ready",
+    ]
+    messages = [
+        "Check out our new course on FastAPI!",
+        "Great job on completing your daily lesson.",
+        "You've hit a 7-day streak! Keep it up.",
+        "You've earned the 'Fast Learner' badge.",
+        "Your lesson audio has been generated successfully.",
+    ]
+    types = ["info", "success", "warning", "error"]
+
+    # Pick a random user ID. If there are active connections, pick one of them
+    # so someone actually receives the event.
+    active_users = list(notification_manager.active_connections.keys())
+    if active_users:
+        user_id = random.choice(active_users)
+    else:
+        user_id = random.randint(1, 100)
+
+    event = NotificationInAppPushEvent(
+        user_id=user_id,
+        notification_id=random.randint(1000, 9999),
+        title=random.choice(titles),
+        message=random.choice(messages),
+        type=random.choice(types),
+        in_app_event=random.choice(list(InAppEventType)),
+        data={"random_value": random.random()},
+    )
+
+    event_bus.dispatch(event)
+
+    return success_response(
+        data={
+            "user_id": user_id,
+            "title": event.title,
+            "message": event.message,
+            "type": event.type,
+            "in_app_event": event.in_app_event,
+        },
+        details="Random notification event emitted",
+    )
 
 
 @router.websocket("/ws")

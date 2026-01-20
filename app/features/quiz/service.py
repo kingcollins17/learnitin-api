@@ -71,7 +71,7 @@ class QuizService:
         assert quiz_id is not None
         event = QuizGeneratedEvent(
             quiz_id=quiz_id,
-            lesson_id=lesson.id,  # ty:ignore[invalid-argument-type]
+            lesson_id=lesson.id,
             question_count=len(quiz_data.questions),
         )
         event_bus.dispatch(event)

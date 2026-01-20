@@ -139,33 +139,6 @@ async def get_lesson(
         )
 
 
-@router.post("", response_model=ApiResponse[LessonDetailResponse])
-async def create_lesson(
-    lesson_data: LessonCreate,
-    session: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_active_user),
-):
-    """
-    Create a new lesson.
-
-    **Authentication required.**
-    """
-    try:
-        service = LessonService(session)
-        lesson = await service.create_lesson(lesson_data.model_dump())
-
-        return success_response(
-            data=lesson,
-            details="Lesson created successfully",
-        )
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create lesson: {str(e)}",
-        )
-
-
 @router.patch("/{lesson_id}", response_model=ApiResponse[LessonDetailResponse])
 async def update_lesson(
     lesson_id: int,
@@ -196,35 +169,6 @@ async def update_lesson(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update lesson: {str(e)}",
-        )
-
-
-@router.delete("/{lesson_id}", response_model=ApiResponse[dict])
-async def delete_lesson(
-    lesson_id: int,
-    session: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_active_user),
-):
-    """
-    Delete a lesson.
-
-    **Authentication required.**
-    """
-    try:
-        service = LessonService(session)
-        await service.delete_lesson(lesson_id)
-
-        return success_response(
-            data={"lesson_id": lesson_id},
-            details="Lesson deleted successfully",
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete lesson: {str(e)}",
         )
 
 

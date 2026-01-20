@@ -8,6 +8,7 @@ from app.features.modules.repository import ModuleRepository, UserModuleReposito
 from app.features.modules.models import Module, UserModule
 from app.features.courses.models import ProgressStatus
 from app.features.courses.repository import UserCourseRepository
+from app.features.lessons.repository import LessonRepository, UserLessonRepository
 
 
 class ModuleService:
@@ -122,6 +123,46 @@ class UserModuleService:
         self.repository = UserModuleRepository(session)
         self.module_repo = ModuleRepository(session)
         self.user_course_repo = UserCourseRepository(session)
+        self.lesson_repo = LessonRepository(session)
+        self.user_lesson_repo = UserLessonRepository(session)
+
+    async def check_and_complete_module(self, user_id: int, module_id: int) -> bool:
+        """
+        Check if all lessons in a module are completed and mark module as completed.
+
+        Args:
+            user_id: ID of the user
+            module_id: ID of the module
+
+        Returns:
+            True if module is completed, False otherwise
+        """
+        lessons = await self.lesson_repo.get_by_module_id(module_id)
+        if not lessons:
+            # If a module has no lessons, we consider it completed if it exists
+            return True
+
+        user_lessons = await self.user_lesson_repo.get_by_user_and_module(
+            user_id, module_id
+        )
+
+        completed_lesson_ids = {
+            ul.lesson_id for ul in user_lessons if ul.status == ProgressStatus.COMPLETED
+        }
+
+        all_completed = all(l.id in completed_lesson_ids for l in lessons)
+
+        if all_completed:
+            user_module = await self.repository.get_by_user_and_module(
+                user_id, module_id
+            )
+            if user_module and user_module.status != ProgressStatus.COMPLETED:
+                user_module.status = ProgressStatus.COMPLETED
+                user_module.updated_at = datetime.now(timezone.utc)
+                await self.repository.update(user_module)
+            return True
+
+        return False
 
     async def start_module(
         self, user_id: int, module_id: int, course_id: int
@@ -166,14 +207,20 @@ class UserModuleService:
             user_previous_module = await self.repository.get_by_user_and_module(
                 user_id=user_id, module_id=previous_module.id
             )
+
+            # Check if previous module is completed. If not, try to auto-complete it by checking lessons.
             if (
                 not user_previous_module
                 or user_previous_module.status != ProgressStatus.COMPLETED
             ):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"You must complete the previous module '{previous_module.title}' before starting this one.",
+                is_actually_completed = await self.check_and_complete_module(
+                    user_id, previous_module.id
                 )
+                if not is_actually_completed:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"You must complete the previous module '{previous_module.title}' before starting this one.",
+                    )
 
         # Create user module record
         user_module = UserModule(
