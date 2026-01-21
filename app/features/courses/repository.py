@@ -166,7 +166,10 @@ class UserCourseRepository:
         result = await self.session.execute(
             select(UserCourse)
             .where(UserCourse.user_id == user_id)
-            .options(selectinload(UserCourse.course))  # type: ignore
+            .options(
+                selectinload(UserCourse.course).selectinload(Course.category),  # type: ignore
+                selectinload(UserCourse.course).selectinload(Course.sub_category),  # type: ignore
+            )
             .offset(skip)
             .limit(limit)
         )
@@ -179,7 +182,10 @@ class UserCourseRepository:
         result = await self.session.execute(
             select(UserCourse)
             .where(UserCourse.id == user_course_id)
-            .options(selectinload(UserCourse.course))  # type: ignore
+            .options(
+                selectinload(UserCourse.course).selectinload(Course.category),  # type: ignore
+                selectinload(UserCourse.course).selectinload(Course.sub_category),  # type: ignore
+            )
         )
         return result.scalar_one_or_none()
 
@@ -193,7 +199,10 @@ class UserCourseRepository:
             select(UserCourse)
             .where(UserCourse.user_id == user_id)
             .where(UserCourse.course_id == course_id)
-            .options(selectinload(UserCourse.course))  # type: ignore
+            .options(
+                selectinload(UserCourse.course).selectinload(Course.category),  # type: ignore
+                selectinload(UserCourse.course).selectinload(Course.sub_category),  # type: ignore
+            )
         )
         return result.scalar_one_or_none()
 
