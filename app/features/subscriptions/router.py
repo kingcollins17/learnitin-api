@@ -111,7 +111,7 @@ async def google_play_webhook(payload: PubSubPayload):
 
         # Now you can use play_data.subscriptionNotification safely
         print(f"Received event for: {play_data.packageName}")
-
+        print(f"play_data: {play_data}\njson={notification_json}")
     except Exception as e:
         print(f"Error decoding webhook: {e}")
         # Still return 200 so Google stops retrying if the data is malformed
