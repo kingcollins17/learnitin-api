@@ -31,7 +31,11 @@ class CourseRepository:
         result = await self.session.execute(
             select(Course)
             .where(Course.id == course_id)
-            .options(selectinload(Course.modules).selectinload(Module.lessons))  # type: ignore
+            .options(
+                selectinload(Course.modules).selectinload(Module.lessons),  # type: ignore
+                selectinload(Course.category),  # type: ignore
+                selectinload(Course.sub_category),  # type: ignore
+            )
         )
         return result.scalar_one_or_none()
 
