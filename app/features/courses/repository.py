@@ -14,8 +14,12 @@ class CourseRepository:
 
     async def get_by_id(self, course_id: int) -> Optional[Course]:
         """Get course by ID."""
+        from sqlalchemy.orm import selectinload
+
         result = await self.session.execute(
-            select(Course).where(Course.id == course_id)
+            select(Course)
+            .where(Course.id == course_id)
+            .options(selectinload(Course.category), selectinload(Course.sub_category))  # type: ignore
         )
         return result.scalar_one_or_none()
 
@@ -35,8 +39,14 @@ class CourseRepository:
         self, user_id: int, skip: int = 0, limit: int = 100
     ) -> List[Course]:
         """Get all courses for a specific user."""
+        from sqlalchemy.orm import selectinload
+
         result = await self.session.execute(
-            select(Course).where(Course.user_id == user_id).offset(skip).limit(limit)
+            select(Course)
+            .where(Course.user_id == user_id)
+            .options(selectinload(Course.category), selectinload(Course.sub_category))  # type: ignore
+            .offset(skip)
+            .limit(limit)
         )
         return list(result.scalars().all())
 
@@ -61,7 +71,14 @@ class CourseRepository:
 
     async def get_all(self, skip: int = 0, limit: int = 100) -> List[Course]:
         """Get all courses with pagination."""
-        result = await self.session.execute(select(Course).offset(skip).limit(limit))
+        from sqlalchemy.orm import selectinload
+
+        result = await self.session.execute(
+            select(Course)
+            .options(selectinload(Course.category), selectinload(Course.sub_category))  # type: ignore
+            .offset(skip)
+            .limit(limit)
+        )
         return list(result.scalars().all())
 
     async def get_all_with_filters(
@@ -75,7 +92,11 @@ class CourseRepository:
         min_enrollees: Optional[int] = None,
     ) -> List[Course]:
         """Get all courses with pagination and optional filters."""
-        query = select(Course)
+        from sqlalchemy.orm import selectinload
+
+        query = select(Course).options(
+            selectinload(Course.category), selectinload(Course.sub_category)  # type: ignore
+        )
 
         # Apply filters
         if is_public is not None:

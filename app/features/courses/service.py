@@ -332,6 +332,52 @@ class CourseService:
 
         return await self.repository.update(course)
 
+    async def unpublish_course(self, user_id: int, course_id: int) -> Course:
+        """
+        Unpublish a course.
+
+        Args:
+            user_id: ID of the user attempting to unpublish
+            course_id: ID of the course to unpublish
+
+        Returns:
+            Updated Course object
+
+        Raises:
+            HTTPException: If course not found, user is not the creator, or course has more than 1 enrollee
+        """
+        course = await self.repository.get_by_id(course_id)
+
+        if not course:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Course not found",
+            )
+
+        # Only the course creator can unpublish it
+        if course.user_id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to unpublish this course",
+            )
+
+        # Check if the course can be unpublished
+        if course.total_enrollees > 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This course cannot be unpublished because other users have enrolled in it.",
+            )
+
+        # Update is_public to False
+        course.is_public = False
+
+        # Update timestamp
+        from datetime import datetime, timezone
+
+        course.updated_at = datetime.now(timezone.utc)
+
+        return await self.repository.update(course)
+
     async def delete_course(self, user_id: int, course_id: int) -> None:
         """
         Delete a course.

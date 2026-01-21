@@ -239,6 +239,43 @@ async def publish_course(
         )
 
 
+@router.post("/{course_id}/unpublish", response_model=ApiResponse[CourseResponse])
+async def unpublish_course(
+    course_id: int,
+    session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Unpublish a course to make it private.
+
+    This endpoint updates the course to be private (is_public=False).
+    Unpublishing is only allowed if the course has 1 or fewer enrollees.
+
+    **Authentication required** - only course creator can unpublish.
+    """
+    try:
+        assert current_user.id  # Ensure user has an ID
+        service = CourseService(session)
+
+        updated_course = await service.unpublish_course(
+            user_id=current_user.id,
+            course_id=course_id,
+        )
+
+        return success_response(
+            data=updated_course,
+            details="Course unpublished successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to unpublish course: {str(e)}",
+        )
+
+
 @router.post("/{course_id}/enroll", response_model=ApiResponse[UserCourse])
 async def enroll_course(
     course_id: int,
