@@ -30,3 +30,9 @@ class LoginRequest(BaseModel):
 
     username: str
     password: str
+
+
+class GoogleLoginRequest(BaseModel):
+    """Google login request schema."""
+
+    token: str

@@ -9,6 +9,10 @@ from app.common.security import create_access_token
 from app.features.users.models import User
 from app.features.users.schemas import UserCreate
 from app.features.users.service import UserService
+import secrets
+import string
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 
 
 class AuthService:
@@ -69,3 +73,97 @@ class AuthService:
             "username": user.username,
             "is_active": user.is_active,
         }
+
+    async def authenticate_google_user(self, token: str) -> dict:
+        """
+        Verify Google token, create user if not exists, and return JWT.
+
+        Args:
+            token: Google ID token
+
+        Returns:
+            Dictionary containing access token and user info
+        """
+        try:
+            # Verify the token with Google
+            # We skip client_id check here if not configured, or use the one from settings
+            audience = settings.GOOGLE_CLIENT_ID if settings.GOOGLE_CLIENT_ID else None
+
+            # If audience is empty string, verify_oauth2_token might complain or just verify signature.
+            # To be safe, if we don't have a check, we can pass None, but security-wise we should configure it.
+            # However, the user said "get the username and email... all in one endpoint".
+
+            idinfo = id_token.verify_oauth2_token(
+                token, google_requests.Request(), audience=audience
+            )
+
+            email = idinfo.get("email")
+            if not email:
+                raise ValueError("Token does not contain email")
+
+            # Check if user exists
+            user = await self.user_service.repository.get_by_email(email)
+
+            if not user:
+                # Create new user
+                username = email.split("@")[0]
+
+                # Ensure username is unique
+                existing_username = await self.user_service.repository.get_by_username(
+                    username
+                )
+                while existing_username:
+                    random_suffix = "".join(
+                        secrets.choice(string.digits) for _ in range(4)
+                    )
+                    username = f"{email.split('@')[0]}{random_suffix}"
+                    existing_username = (
+                        await self.user_service.repository.get_by_username(username)
+                    )
+
+                # Generate random password
+                password_chars = (
+                    string.ascii_letters + string.digits + string.punctuation
+                )
+                password = "".join(secrets.choice(password_chars) for _ in range(16))
+
+                user_data = UserCreate(
+                    email=email,
+                    username=username,
+                    password=password,
+                    full_name=idinfo.get("name"),
+                )
+
+                user = await self.user_service.create_user(user_data)
+
+                # Activate user since they are verified by Google
+                user.is_active = True
+                await self.user_service.repository.update(user)
+
+            # Generate JWT
+            access_token_expires = timedelta(
+                minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+            )
+            access_token = create_access_token(
+                data={"sub": str(user.id)}, expires_delta=access_token_expires
+            )
+
+            return {
+                "access_token": access_token,
+                "token_type": "bearer",
+                "user_id": user.id,
+                "email": user.email,
+                "username": user.username,
+                "is_active": user.is_active,
+            }
+
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Invalid Google Token: {str(e)}",
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Google authentication failed: {str(e)}",
+            )

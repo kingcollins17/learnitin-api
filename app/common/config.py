@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     # Google Play
     GOOGLE_PLAY_PACKAGE_NAME: str = Field(default="com.antigravity.app")
 
+    # Google Auth
+    GOOGLE_CLIENT_ID: str = Field(default="")
+
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = Field(
         default=[

@@ -6,7 +6,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.database.session import get_async_session
 from app.common.responses import ApiResponse, success_response
-from app.features.auth.schemas import Token
+from app.features.auth.schemas import Token, GoogleLoginRequest
 from app.features.auth.service import AuthService
 from app.features.auth.otp_repository import OTPRepository
 from app.features.auth.otp_schemas import OTPRequest, OTPResponse, OTPVerify
@@ -119,6 +119,44 @@ async def login(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Login failed: {str(e)}",
+        )
+
+
+@router.post("/google", response_model=Token)
+async def google_login(
+    data: GoogleLoginRequest,
+    session: AsyncSession = Depends(get_async_session),
+):
+    """
+    Login with Google.
+
+    Verifies the Google ID provided by the client, checks if the user exists,
+    creates the user if not (generating a random password), and returns a JWT token.
+    The user is automatically activated since Google verification is trusted.
+
+    **Request Body:**
+    - `token`: Google ID token
+
+    **Response:**
+    - `access_token`: JWT token for authentication
+    - `token_type`: Always "bearer"
+    - `user_id`: User's unique ID
+    - `email`: User's email address
+    - `username`: User's username
+    - `is_active`: Always true for Google login
+    """
+    try:
+        service = AuthService(session)
+        token_data = await service.authenticate_google_user(data.token)
+        return token_data
+    except HTTPException:
+        traceback.print_exc()
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Google login failed: {str(e)}",
         )
 
 
