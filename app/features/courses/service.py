@@ -25,6 +25,7 @@ from app.features.courses.repository import (
     CategoryRepository,
     SubCategoryRepository,
 )
+from app.common.events import event_bus, CourseEnrolledEvent
 import json
 import re
 import uuid
@@ -177,6 +178,9 @@ class CourseService:
         if course:
             course.total_enrollees += 1
             await self.repository.update(course)
+
+        # Emit course enrolled event
+        event_bus.dispatch(CourseEnrolledEvent(user_id=user_id, course_id=course_id))
 
         return user_course
 

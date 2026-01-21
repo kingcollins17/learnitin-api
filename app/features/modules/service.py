@@ -160,6 +160,15 @@ class UserModuleService:
                 user_module.status = ProgressStatus.COMPLETED
                 user_module.updated_at = datetime.now(timezone.utc)
                 await self.repository.update(user_module)
+
+                # Increment completed_modules in UserCourse
+                user_course = await self.user_course_repo.get_by_user_and_course(
+                    user_id, user_module.course_id
+                )
+                if user_course:
+                    user_course.completed_modules += 1
+                    user_course.updated_at = datetime.now(timezone.utc)
+                    await self.user_course_repo.update(user_course)
             return True
 
         return False
