@@ -96,6 +96,12 @@ async def google_play_webhook(payload: PubSubPayload):
     # (FastAPI does this automatically by returning 200)
 
     try:
+        print("Received webook event:")
+        print(payload)
+        if not payload.message.data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Missing data"
+            )
         # 3. Decode the Base64 data string
         decoded_data = base64.b64decode(payload.message.data).decode("utf-8")
 

@@ -40,9 +40,9 @@ class SubscriptionResponse(BaseModel):
 
 # 1. This matches the inner data from Google Play
 class GooglePlayNotification(BaseModel):
-    version: str
-    packageName: str
-    eventTimeMillis: str
+    version: Optional[str] = None
+    packageName: Optional[str] = None
+    eventTimeMillis: Optional[str] = None
     subscriptionNotification: Optional[dict] = None
     oneTimeProductNotification: Optional[dict] = None
     testNotification: Optional[dict] = None
@@ -50,11 +50,11 @@ class GooglePlayNotification(BaseModel):
 
 # 2. This matches the "Envelope" that Pub/Sub sends to your webhook
 class PubSubMessage(BaseModel):
-    data: str  # This is the Base64 string
-    messageId: str
-    publishTime: str
+    data: Optional[str] = None  # This is the Base64 string
+    messageId: Optional[str] = None
+    publishTime: Optional[str] = None
 
 
 class PubSubPayload(BaseModel):
-    message: PubSubMessage
-    subscription: str
+    message: Optional[PubSubMessage] = None
+    subscription: Optional[str] = None
