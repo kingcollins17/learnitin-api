@@ -2,20 +2,18 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+import base64
+import json
 from app.common.deps import get_current_user, get_async_session
 from app.features.users.models import User
 from .models import Subscription
-from .schemas import (
-    SubscriptionVerifyRequest,
-    SubscriptionResponse,
-    GoogleWebhookPayload,
-)
+from .schemas import *
 from .repository import SubscriptionRepository
 from .google_play_service import GooglePlayService
 from .service import SubscriptionService
 
 
-router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
+router = APIRouter(prefix="/subscriptions")
 
 
 async def get_subscription_service(
@@ -93,25 +91,23 @@ async def resync_subscription(
 
 
 @router.post("/google/webhook")
-async def google_play_webhook(
-    payload: GoogleWebhookPayload,
-    service: SubscriptionService = Depends(get_subscription_service),
-):
-    """
-    Handle Real-Time Developer Notifications (RTDN) from Google Play.
+async def google_play_webhook(payload: PubSubPayload):
+    # Acknowledge immediately to avoid retries from Google
+    # (FastAPI does this automatically by returning 200)
 
-    This endpoint receives push notifications from Google Pub/Sub when
-    subscription events occur (renewal, cancellation, expiry, etc.).
+    try:
+        # 3. Decode the Base64 data string
+        decoded_data = base64.b64decode(payload.message.data).decode("utf-8")
 
-    Note: In production, this should include verification of the Pub/Sub token.
+        # 4. Parse the inner JSON into your original model
+        notification_json = json.loads(decoded_data)
+        play_data = GooglePlayNotification(**notification_json)
 
-    Args:
-        payload: The RTDN payload from Google.
-        service: The subscription service instance.
+        # Now you can use play_data.subscriptionNotification safely
+        print(f"Received event for: {play_data.packageName}")
 
-    Returns:
-        A success status message.
-    """
-    # Simply log and return 200 for now.
-    # Logic to process payload.subscriptionNotification should be added here.
+    except Exception as e:
+        print(f"Error decoding webhook: {e}")
+        # Still return 200 so Google stops retrying if the data is malformed
+
     return {"status": "success"}

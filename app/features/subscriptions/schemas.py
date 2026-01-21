@@ -38,12 +38,23 @@ class SubscriptionResponse(BaseModel):
         from_attributes = True
 
 
-class GoogleWebhookPayload(BaseModel):
-    """Schema for Google Play RTDN webhook payload."""
-
+# 1. This matches the inner data from Google Play
+class GooglePlayNotification(BaseModel):
     version: str
     packageName: str
     eventTimeMillis: str
     subscriptionNotification: Optional[dict] = None
     oneTimeProductNotification: Optional[dict] = None
     testNotification: Optional[dict] = None
+
+
+# 2. This matches the "Envelope" that Pub/Sub sends to your webhook
+class PubSubMessage(BaseModel):
+    data: str  # This is the Base64 string
+    messageId: str
+    publishTime: str
+
+
+class PubSubPayload(BaseModel):
+    message: PubSubMessage
+    subscription: str
