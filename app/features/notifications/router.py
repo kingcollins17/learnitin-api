@@ -20,7 +20,6 @@ from app.common.security import decode_access_token
 from app.features.users.models import User
 from .service import NotificationService
 from .schemas import NotificationResponse, NotificationUpdate, NotificationCreate
-from .websocket_manager import notification_manager
 from app.common.events import event_bus, NotificationInAppPushEvent, InAppEventType
 import random
 
@@ -191,10 +190,6 @@ async def test_fire_notification(user_id: int):
     ]
     types = ["info", "success", "warning", "error"]
 
-    # Pick a random user ID. If there are active connections, pick one of them
-    # so someone actually receives the event.
-    active_users = list(notification_manager.active_connections.keys())
-
     event = NotificationInAppPushEvent(
         user_id=user_id,
         notification_id=random.randint(1000, 9999),
@@ -218,44 +213,3 @@ async def test_fire_notification(user_id: int):
         },
         details="Random notification event emitted",
     )
-
-
-@router.websocket("/ws")
-async def notification_websocket(
-    websocket: WebSocket,
-    token: Optional[str] = Query(None),
-):
-    """
-    WebSocket endpoint for real-time notifications.
-    Expects a JWT token in the query parameters for authentication.
-    """
-    if not token:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        return
-
-    payload = decode_access_token(token)
-    if not payload:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        return
-
-    user_id_str: Optional[str] = payload.get("sub")
-    if not user_id_str:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        return
-
-    user_id = int(user_id_str)
-
-    # Accept connection and track it
-    await notification_manager.connect(user_id, websocket)
-
-    try:
-        # Keep connection open until client disconnects or an error occurs
-        while True:
-            # We don't expect messages from the client yet, but we need to listen
-            # to detect disconnection
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        notification_manager.disconnect(user_id, websocket)
-    except Exception:
-        notification_manager.disconnect(user_id, websocket)
-        await websocket.close()

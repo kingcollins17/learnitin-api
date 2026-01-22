@@ -12,7 +12,6 @@ from app.features.lessons.router import router as lessons_router
 from app.features.notifications.router import router as notifications_router
 from app.features.quiz.router import router as quiz_router
 from app.features.subscriptions.router import router as subscriptions_router
-from app.features.notifications.websocket_manager import notification_manager
 from app.features.notifications.handlers import handle_in_app_push_for_fcm
 from app.common.events import NotificationInAppPushEvent
 
@@ -23,8 +22,6 @@ async def lifespan(app: FastAPI):
     # Startup: Initialize database
     await init_db()
 
-    # Initialize real-time notification manager subscription
-    notification_manager.subscribe_to_bus()
     event_bus.on(
         NotificationInAppPushEvent, handle_in_app_push_for_fcm
     )  # ty:ignore[no-matching-overload]
