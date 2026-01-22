@@ -25,6 +25,7 @@ async def send_push_notification_task(
     from app.common.database.session import AsyncSessionLocal
 
     async with AsyncSessionLocal() as session:
+
         user_repo = UserRepository(session)
         user = await user_repo.get_by_id(user_id)
 

@@ -171,7 +171,7 @@ async def test_create_notification(
 
 
 @router.get("/test-fire", response_model=ApiResponse[dict])
-async def test_fire_notification():
+async def test_fire_notification(user_id: int):
     """
     Fire a random NotificationInAppPushEvent for testing.
     """
@@ -194,10 +194,6 @@ async def test_fire_notification():
     # Pick a random user ID. If there are active connections, pick one of them
     # so someone actually receives the event.
     active_users = list(notification_manager.active_connections.keys())
-    if active_users:
-        user_id = random.choice(active_users)
-    else:
-        user_id = random.randint(1, 100)
 
     event = NotificationInAppPushEvent(
         user_id=user_id,
