@@ -205,8 +205,9 @@ async def test_fire_notification():
         title=random.choice(titles),
         message=random.choice(messages),
         type=random.choice(types),
-        in_app_event=random.choice(list(InAppEventType)),
-        data={"random_value": random.random()},
+        # in_app_event=random.choice(list(InAppEventType)),
+        in_app_event=InAppEventType.AUDIO_READY,
+        data={"lesson_id": random.randint(1, 100)},
     )
 
     event_bus.dispatch(event)

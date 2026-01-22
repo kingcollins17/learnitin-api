@@ -12,8 +12,6 @@ class InAppEventType(str, Enum):
     AUDIO_GENERATION_FAILED = "audio_generation_failed"
     COURSE_ENROLLED = "course_enrolled"
     LESSON_COMPLETED = "lesson_completed"
-    STREAK_UPDATED = "streak_updated"
-    ACHIEVEMENT_UNLOCKED = "achievement_unlocked"
 
 
 class AppEvent(BaseEvent):
