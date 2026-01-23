@@ -18,7 +18,8 @@ async def handle_in_app_push_for_fcm(event: NotificationInAppPushEvent):
     message = event.message
     notification_id = event.notification_id
     data = event.data or {}
-    data["in_app_event"] = event.in_app_event.value
+    if event.in_app_event:
+        data["in_app_event"] = event.in_app_event.value
 
     if user_id and title and message:
         # Trigger the push notification task

@@ -47,7 +47,8 @@ class Settings(BaseSettings):
     FIREBASE_CREDENTIALS_JSON: str = Field(default="")
 
     # Google Play
-    GOOGLE_PLAY_PACKAGE_NAME: str = Field(default="com.antigravity.app")
+    GOOGLE_PLAY_PACKAGE_NAME: str = Field(default="com.learnitin.learnitin")
+    GOOGLE_PLAY_MOCK: bool = Field(default=False)
 
     # Google Auth
     GOOGLE_CLIENT_ID: str = Field(default="")

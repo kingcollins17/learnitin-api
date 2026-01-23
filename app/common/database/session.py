@@ -56,7 +56,10 @@ async def init_db() -> None:
     from app.features.lessons.models import Lesson  # noqa: F401
     from app.features.quiz.models import Quiz, Question  # noqa: F401
 
-    # Add other model imports as you create them
+    from app.features.subscriptions.models import (
+        Subscription,
+        SubscriptionUsage,
+    )  # noqa: F401
 
     async with engine.begin() as conn:
         # Create all tables

@@ -24,7 +24,7 @@ class Subscription(SQLModel, table=True):
     user_id: int = Field(index=True, nullable=False)
     product_id: str = Field(max_length=100, nullable=False)
     purchase_token: Optional[str] = Field(
-        default=None, max_length=255, unique=True, index=True, nullable=True
+        default=None, max_length=255, index=True, nullable=True
     )
     status: SubscriptionStatus = Field(index=True, nullable=False)
     expiry_time: datetime = Field(nullable=False)

@@ -51,15 +51,15 @@ async def lifespan(app: FastAPI):
         handle_subscription_recovered,
     )
 
-    event_bus.on(SubscriptionPurchasedEvent, handle_subscription_purchased)
-    event_bus.on(SubscriptionRenewedEvent, handle_subscription_renewed)
-    event_bus.on(SubscriptionCanceledEvent, handle_subscription_canceled)
-    event_bus.on(SubscriptionExpiredEvent, handle_subscription_expired)
-    event_bus.on(SubscriptionPausedEvent, handle_subscription_paused)
-    event_bus.on(SubscriptionResumedEvent, handle_subscription_resumed)
-    event_bus.on(SubscriptionRevokedEvent, handle_subscription_revoked)
-    event_bus.on(SubscriptionGracePeriodEvent, handle_subscription_grace_period)
-    event_bus.on(SubscriptionRecoveredEvent, handle_subscription_recovered)
+    event_bus.on(SubscriptionPurchasedEvent, handle_subscription_purchased)  # type: ignore
+    event_bus.on(SubscriptionRenewedEvent, handle_subscription_renewed)  # type: ignore
+    event_bus.on(SubscriptionCanceledEvent, handle_subscription_canceled)  # type: ignore
+    event_bus.on(SubscriptionExpiredEvent, handle_subscription_expired)  # type: ignore
+    event_bus.on(SubscriptionPausedEvent, handle_subscription_paused)  # type: ignore
+    event_bus.on(SubscriptionResumedEvent, handle_subscription_resumed)  # type: ignore
+    event_bus.on(SubscriptionRevokedEvent, handle_subscription_revoked)  # type: ignore
+    event_bus.on(SubscriptionGracePeriodEvent, handle_subscription_grace_period)  # type: ignore
+    event_bus.on(SubscriptionRecoveredEvent, handle_subscription_recovered)  # type: ignore
 
     yield
     # Shutdown: Close database connections and stop event bus
@@ -111,7 +111,7 @@ app.include_router(
 )
 app.include_router(
     subscriptions_router,
-    prefix=f"{settings.API_V1_PREFIX}/billing",
+    prefix=f"{settings.API_V1_PREFIX}",
     tags=["Subscriptions"],
 )
 

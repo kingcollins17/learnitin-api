@@ -25,7 +25,7 @@ class SubscriptionRepository:
             The `Subscription` object if found, else None.
         """
         result = await self.session.execute(
-            select(Subscription).where(Subscription.id == subscription_id)
+            select(Subscription).where(col(Subscription.id) == subscription_id)
         )
         return result.scalar_one_or_none()
 
@@ -43,7 +43,7 @@ class SubscriptionRepository:
         # For simplicity, we'll get the most recent one.
         result = await self.session.execute(
             select(Subscription)
-            .where(Subscription.user_id == user_id)
+            .where(col(Subscription.user_id) == user_id)
             .order_by(col(Subscription.expiry_time).desc())
         )
         return result.scalars().first()
@@ -64,8 +64,8 @@ class SubscriptionRepository:
 
         result = await self.session.execute(
             select(Subscription)
-            .where(Subscription.user_id == user_id)
-            .where(Subscription.status == SubscriptionStatus.ACTIVE)
+            .where(col(Subscription.user_id) == user_id)
+            .where(col(Subscription.status) == SubscriptionStatus.ACTIVE)
             .order_by(col(Subscription.expiry_time).desc())
         )
         return result.scalars().first()
@@ -83,9 +83,11 @@ class SubscriptionRepository:
             The `Subscription` object if found, else None.
         """
         result = await self.session.execute(
-            select(Subscription).where(Subscription.purchase_token == purchase_token)
+            select(Subscription)
+            .where(col(Subscription.purchase_token) == purchase_token)
+            .order_by(col(Subscription.expiry_time).desc())
         )
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     async def create(self, subscription: Subscription) -> Subscription:
         """Create a new subscription."""
@@ -119,8 +121,8 @@ class SubscriptionRepository:
 
         result = await self.session.execute(
             update(Subscription)
-            .where(Subscription.user_id == user_id)
-            .where(Subscription.status == SubscriptionStatus.ACTIVE)
+            .where(col(Subscription.user_id) == user_id)
+            .where(col(Subscription.status) == SubscriptionStatus.ACTIVE)
             .values(status=SubscriptionStatus.EXPIRED)
         )
         await self.session.flush()

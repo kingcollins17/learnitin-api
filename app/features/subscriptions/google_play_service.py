@@ -1,9 +1,13 @@
 """Google Play Developer API service."""
 
 import json
+import logging
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from app.common.config import settings
+
+
+logger = logging.getLogger(__name__)
 
 
 class GooglePlayService:
@@ -22,12 +26,20 @@ class GooglePlayService:
 
             try:
                 service_account_info = json.loads(settings.FIREBASE_CREDENTIALS_JSON)
+
+                # Fix for incorrectly escaped newlines in private key from environment variables
+                if "private_key" in service_account_info:
+                    service_account_info["private_key"] = service_account_info[
+                        "private_key"
+                    ].replace("\\n", "\n")
+
                 credentials = service_account.Credentials.from_service_account_info(
                     service_account_info, scopes=self.scopes
                 )
                 self._service = build("androidpublisher", "v3", credentials=credentials)
             except Exception as e:
                 # In a real app, log this properly
+                logger.error(f"Failed to initialize Google Play service: {e}")
                 raise RuntimeError(
                     f"Failed to initialize Google Play service: {str(e)}"
                 )
@@ -51,6 +63,24 @@ class GooglePlayService:
         Raises:
             RuntimeError: If the API call fails or the service is not properly initialized.
         """
+        if settings.GOOGLE_PLAY_MOCK:
+            from datetime import datetime, timedelta, timezone
+
+            logger.info(f"MOCK MODE: Verifying subscription {product_id}")
+            # Success response simulation
+            expiry_date = datetime.now(timezone.utc) + timedelta(days=30)
+            return {
+                "kind": "androidpublisher#subscriptionPurchase",
+                "startTimeMillis": str(int(datetime.now().timestamp() * 1000)),
+                "expiryTimeMillis": str(int(expiry_date.timestamp() * 1000)),
+                "autoRenewing": True,
+                "priceCurrencyCode": "USD",
+                "priceAmountMicros": "9990000",
+                "countryCode": "US",
+                "paymentState": 1,  # 1 = Payment received
+                "acknowledgementState": 1,
+            }
+
         service = self._get_service()
         try:
             # Note: build() returns a sync client, but we can wrap it or just call it
