@@ -22,9 +22,45 @@ async def lifespan(app: FastAPI):
     # Startup: Initialize database
     await init_db()
 
+    # Register notification event handlers
     event_bus.on(
         NotificationInAppPushEvent, handle_in_app_push_for_fcm
     )  # ty:ignore[no-matching-overload]
+
+    # Register subscription event handlers for Google Play webhooks
+    from app.features.subscriptions.events import (
+        SubscriptionPurchasedEvent,
+        SubscriptionRenewedEvent,
+        SubscriptionCanceledEvent,
+        SubscriptionExpiredEvent,
+        SubscriptionPausedEvent,
+        SubscriptionResumedEvent,
+        SubscriptionRevokedEvent,
+        SubscriptionGracePeriodEvent,
+        SubscriptionRecoveredEvent,
+    )
+    from app.features.subscriptions.handlers import (
+        handle_subscription_purchased,
+        handle_subscription_renewed,
+        handle_subscription_canceled,
+        handle_subscription_expired,
+        handle_subscription_paused,
+        handle_subscription_resumed,
+        handle_subscription_revoked,
+        handle_subscription_grace_period,
+        handle_subscription_recovered,
+    )
+
+    event_bus.on(SubscriptionPurchasedEvent, handle_subscription_purchased)
+    event_bus.on(SubscriptionRenewedEvent, handle_subscription_renewed)
+    event_bus.on(SubscriptionCanceledEvent, handle_subscription_canceled)
+    event_bus.on(SubscriptionExpiredEvent, handle_subscription_expired)
+    event_bus.on(SubscriptionPausedEvent, handle_subscription_paused)
+    event_bus.on(SubscriptionResumedEvent, handle_subscription_resumed)
+    event_bus.on(SubscriptionRevokedEvent, handle_subscription_revoked)
+    event_bus.on(SubscriptionGracePeriodEvent, handle_subscription_grace_period)
+    event_bus.on(SubscriptionRecoveredEvent, handle_subscription_recovered)
+
     yield
     # Shutdown: Close database connections and stop event bus
     await event_bus.stop(clear=True)

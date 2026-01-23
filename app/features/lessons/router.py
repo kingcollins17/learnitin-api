@@ -33,7 +33,7 @@ from app.features.lessons.repository import LessonAudioRepository
 from app.features.lessons.lecture_service import lecture_conversion_service
 from app.services.audio_generation_service import audio_generation_service
 from app.services.storage_service import firebase_storage_service
-from app.features.courses.repository import CourseRepository
+from app.features.courses.repository import CourseRepository, UserCourseRepository
 from app.features.modules.repository import ModuleRepository
 from app.features.lessons.generation_service import lesson_generation_service
 from app.features.lessons.tasks import generate_audio_background
@@ -197,6 +197,18 @@ async def start_lesson(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Lesson not found",
+            )
+
+        # Check if user is enrolled in the course
+        user_course_repo = UserCourseRepository(session)
+        user_course = await user_course_repo.get_by_user_and_course(
+            user_id=current_user.id, course_id=lesson.course_id
+        )
+
+        if not user_course:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You must be enrolled in the course to start a lesson",
             )
 
         user_lesson_service = UserLessonService(session)

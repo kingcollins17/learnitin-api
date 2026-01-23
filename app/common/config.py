@@ -52,6 +52,14 @@ class Settings(BaseSettings):
     # Google Auth
     GOOGLE_CLIENT_ID: str = Field(default="")
 
+    # Free Plan Limits (per month)
+    FREE_PLAN_LEARNING_JOURNEYS_LIMIT: int = Field(default=2)
+    FREE_PLAN_LESSONS_LIMIT: int = Field(default=10)
+    FREE_PLAN_AUDIO_LESSONS_LIMIT: int = Field(default=5)
+
+    # Subscription Grace Period (days after expiry before demotion to free)
+    SUBSCRIPTION_GRACE_PERIOD_DAYS: int = Field(default=3)
+
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = Field(
         default=[

@@ -23,10 +23,45 @@ class Subscription(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(index=True, nullable=False)
     product_id: str = Field(max_length=100, nullable=False)
-    purchase_token: str = Field(max_length=255, unique=True, index=True, nullable=False)
+    purchase_token: Optional[str] = Field(
+        default=None, max_length=255, unique=True, index=True, nullable=True
+    )
     status: SubscriptionStatus = Field(index=True, nullable=False)
     expiry_time: datetime = Field(nullable=False)
     auto_renew: bool = Field(default=True, nullable=False)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column_kwargs={"onupdate": lambda: datetime.now(timezone.utc)},
+    )
+
+    class Config:
+        """Pydantic config."""
+
+        from_attributes = True
+
+
+class SubscriptionUsage(SQLModel, table=True):
+    """Usage tracking with 1:1 relationship to Subscription.
+
+    Tracks per-subscription monthly usage (NOT directly tied to user).
+    The unique constraint on subscription_id enforces one-to-one relationship.
+    """
+
+    __tablename__ = "subscription_usages"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    subscription_id: int = Field(
+        foreign_key="subscriptions.id",
+        unique=True,  # Enforces one-to-one relationship
+        index=True,
+        nullable=False,
+    )
+    year: int = Field(nullable=False)
+    month: int = Field(nullable=False)
+    learning_journeys_used: int = Field(default=0)
+    lessons_used: int = Field(default=0)
+    audio_lessons_used: int = Field(default=0)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

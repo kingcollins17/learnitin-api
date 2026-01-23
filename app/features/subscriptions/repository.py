@@ -48,6 +48,28 @@ class SubscriptionRepository:
         )
         return result.scalars().first()
 
+    async def get_active_by_user_id(self, user_id: int) -> Optional[Subscription]:
+        """
+        Retrieve the active subscription for a specific user.
+
+        Only returns subscriptions with ACTIVE status.
+
+        Args:
+            user_id: The ID of the user.
+
+        Returns:
+            The active `Subscription` if found, else None.
+        """
+        from .models import SubscriptionStatus
+
+        result = await self.session.execute(
+            select(Subscription)
+            .where(Subscription.user_id == user_id)
+            .where(Subscription.status == SubscriptionStatus.ACTIVE)
+            .order_by(col(Subscription.expiry_time).desc())
+        )
+        return result.scalars().first()
+
     async def get_by_purchase_token(
         self, purchase_token: str
     ) -> Optional[Subscription]:
@@ -78,3 +100,28 @@ class SubscriptionRepository:
         await self.session.flush()
         await self.session.refresh(subscription)
         return subscription
+
+    async def deactivate_all_for_user(self, user_id: int) -> int:
+        """
+        Deactivate all existing subscriptions for a user.
+
+        Sets all subscriptions to EXPIRED status. This should be called
+        before creating a new subscription to ensure only one is active.
+
+        Args:
+            user_id: The ID of the user.
+
+        Returns:
+            The number of subscriptions deactivated.
+        """
+        from sqlalchemy import update
+        from .models import SubscriptionStatus
+
+        result = await self.session.execute(
+            update(Subscription)
+            .where(Subscription.user_id == user_id)
+            .where(Subscription.status == SubscriptionStatus.ACTIVE)
+            .values(status=SubscriptionStatus.EXPIRED)
+        )
+        await self.session.flush()
+        return result.rowcount  # type: ignore

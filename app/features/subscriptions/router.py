@@ -1,17 +1,40 @@
 """Subscription API router."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 import base64
 import json
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.common.deps import get_current_user, get_async_session
+from app.common.events.bus import event_bus
 from app.features.users.models import User
-from .models import Subscription
-from .schemas import *
-from .repository import SubscriptionRepository
+
+from .events import (
+    SubscriptionPurchasedEvent,
+    SubscriptionRenewedEvent,
+    SubscriptionCanceledEvent,
+    SubscriptionExpiredEvent,
+    SubscriptionPausedEvent,
+    SubscriptionResumedEvent,
+    SubscriptionRevokedEvent,
+    SubscriptionGracePeriodEvent,
+    SubscriptionRecoveredEvent,
+)
 from .google_play_service import GooglePlayService
+from .models import Subscription
+from .repository import SubscriptionRepository
+from .schemas import (
+    PubSubPayload,
+    SubscriptionNotificationType,
+    SubscriptionResponse,
+    SubscriptionVerifyRequest,
+    GooglePlayNotification,
+)
 from .service import SubscriptionService
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/subscriptions")
 
@@ -92,28 +115,121 @@ async def resync_subscription(
 
 @router.post("/google/webhook")
 async def google_play_webhook(payload: PubSubPayload):
-    # Acknowledge immediately to avoid retries from Google
-    # (FastAPI does this automatically by returning 200)
+    """
+    Handle Google Play Real-Time Developer Notifications (RTDN).
+
+    This endpoint receives Pub/Sub messages from Google Play containing
+    subscription state changes. It immediately returns 200 OK to acknowledge
+    receipt, then dispatches events to be processed in the background.
+
+    The bubus event bus handles async processing without blocking the response.
+    """
+    # Always return 200 to acknowledge receipt (prevents retries)
+    # Process notification asynchronously via event bus
 
     try:
-        print("Received webook event:")
-        print(payload)
-        if not payload.message.data:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Missing data"
-            )
-        # 3. Decode the Base64 data string
-        decoded_data = base64.b64decode(payload.message.data).decode("utf-8")
+        if not payload.message or not payload.message.data:
+            logger.warning("Received webhook with missing data")
+            return {"status": "success"}
 
-        # 4. Parse the inner JSON into your original model
+        # Decode the Base64 data string
+        decoded_data = base64.b64decode(payload.message.data).decode("utf-8")
         notification_json = json.loads(decoded_data)
         play_data = GooglePlayNotification(**notification_json)
 
-        # Now you can use play_data.subscriptionNotification safely
-        print(f"Received event for: {play_data.packageName}")
-        print(f"play_data: {play_data}\njson={notification_json}")
+        logger.info(f"Received Google Play notification for: {play_data.packageName}")
+
+        # Handle subscription notifications
+        if play_data.subscriptionNotification:
+            sub_notification = play_data.subscriptionNotification
+            notification_type = sub_notification.notificationType
+            purchase_token = sub_notification.purchaseToken or ""
+            product_id = sub_notification.subscriptionId or ""
+            package_name = play_data.packageName or ""
+
+            logger.info(f"Subscription notification type: {notification_type}")
+
+            # Dispatch appropriate event based on notification type
+            if notification_type == SubscriptionNotificationType.SUBSCRIPTION_PURCHASED:
+                await event_bus.dispatch(
+                    SubscriptionPurchasedEvent(
+                        purchase_token=purchase_token,
+                        product_id=product_id,
+                        package_name=package_name,
+                    )
+                )
+
+            elif notification_type == SubscriptionNotificationType.SUBSCRIPTION_RENEWED:
+                await event_bus.dispatch(
+                    SubscriptionRenewedEvent(
+                        purchase_token=purchase_token,
+                        product_id=product_id,
+                    )
+                )
+
+            elif (
+                notification_type == SubscriptionNotificationType.SUBSCRIPTION_CANCELED
+            ):
+                await event_bus.dispatch(
+                    SubscriptionCanceledEvent(purchase_token=purchase_token)
+                )
+
+            elif notification_type == SubscriptionNotificationType.SUBSCRIPTION_EXPIRED:
+                await event_bus.dispatch(
+                    SubscriptionExpiredEvent(purchase_token=purchase_token)
+                )
+
+            elif notification_type == SubscriptionNotificationType.SUBSCRIPTION_PAUSED:
+                await event_bus.dispatch(
+                    SubscriptionPausedEvent(purchase_token=purchase_token)
+                )
+
+            elif (
+                notification_type == SubscriptionNotificationType.SUBSCRIPTION_RESTARTED
+            ):
+                await event_bus.dispatch(
+                    SubscriptionResumedEvent(purchase_token=purchase_token)
+                )
+
+            elif notification_type == SubscriptionNotificationType.SUBSCRIPTION_REVOKED:
+                await event_bus.dispatch(
+                    SubscriptionRevokedEvent(purchase_token=purchase_token)
+                )
+
+            elif (
+                notification_type
+                == SubscriptionNotificationType.SUBSCRIPTION_IN_GRACE_PERIOD
+            ):
+                await event_bus.dispatch(
+                    SubscriptionGracePeriodEvent(purchase_token=purchase_token)
+                )
+
+            elif (
+                notification_type == SubscriptionNotificationType.SUBSCRIPTION_RECOVERED
+            ):
+                await event_bus.dispatch(
+                    SubscriptionRecoveredEvent(purchase_token=purchase_token)
+                )
+
+            elif notification_type == SubscriptionNotificationType.SUBSCRIPTION_ON_HOLD:
+                # Account hold - similar to grace period
+                await event_bus.dispatch(
+                    SubscriptionGracePeriodEvent(purchase_token=purchase_token)
+                )
+
+            else:
+                logger.info(f"Unhandled notification type: {notification_type}")
+
+        # Handle test notifications
+        elif play_data.testNotification:
+            logger.info(f"Received test notification: {play_data.testNotification}")
+
+        # Handle one-time product notifications (not subscriptions)
+        elif play_data.oneTimeProductNotification:
+            logger.info("Received one-time product notification (not handling)")
+
     except Exception as e:
-        print(f"Error decoding webhook: {e}")
-        # Still return 200 so Google stops retrying if the data is malformed
+        logger.error(f"Error processing webhook: {e}")
+        # Still return 200 to prevent Google from retrying malformed data
 
     return {"status": "success"}
