@@ -113,7 +113,10 @@ async def resync_subscription(
 
 
 @router.post("/google/webhook")
-async def google_play_webhook(payload: PubSubPayload):
+async def google_play_webhook(
+    payload: PubSubPayload,
+    session: AsyncSession = Depends(get_async_session),
+):
     """
     Handle Google Play Real-Time Developer Notifications (RTDN).
 
@@ -156,7 +159,19 @@ async def google_play_webhook(payload: PubSubPayload):
             product_id = sub_notification.subscriptionId or ""
             package_name = play_data.packageName or ""
 
-            logger.info(f"Subscription notification type: {notification_type}")
+            # Check if subscription exists in our database
+            # If not, return 404 to let Google retry later (client might not have verified yet)
+            repo = SubscriptionRepository(session)
+            existing = await repo.get_by_purchase_token(purchase_token)
+
+            if not existing:
+                logger.warning(
+                    f"Subscription not found for token: {purchase_token[:20]}... Returning 404 for retry."
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Subscription not found, retry later",
+                )
 
             # Dispatch appropriate event based on notification type
             if notification_type == SubscriptionNotificationType.SUBSCRIPTION_PURCHASED:
