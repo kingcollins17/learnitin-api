@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.deps import get_current_user, get_async_session
 from app.common.events import LogEvent, LogLevel, event_bus
+from app.common.responses import ApiResponse, success_response
 from app.features.users.models import User
 from .events import (
     SubscriptionPurchasedEvent,
@@ -24,16 +25,24 @@ from .events import (
 from .google_play_service import GooglePlayService
 from .models import Subscription
 from .repository import SubscriptionRepository
+from .service import SubscriptionService
+from .usage_service import SubscriptionUsageService
+from .dependencies import (
+    get_user_subscription,
+    get_subscription_usage_service,
+    get_subscription_service as get_service,
+)
 from .schemas import (
     PubSubPayload,
     SubscriptionNotificationType,
     SubscriptionResponse,
     SubscriptionVerifyRequest,
     GooglePlayNotification,
+    SubscriptionUsageResponse,
 )
-from .service import SubscriptionService
 
 logger = logging.getLogger(__name__)
+
 
 router = APIRouter(prefix="/subscriptions")
 
@@ -47,72 +56,83 @@ async def get_subscription_service(
     return SubscriptionService(repository, google_play)
 
 
-@router.post("/verify", response_model=SubscriptionResponse)
+@router.get("/me", response_model=ApiResponse[SubscriptionResponse])
+async def get_my_subscription(
+    subscription: Subscription = Depends(get_user_subscription),
+    usage_service: SubscriptionUsageService = Depends(get_subscription_usage_service),
+):
+    """
+    Get the current user's active subscription with monthly usage.
+
+    Automatically handles free plan creation/renewal if needed.
+    """
+    # Attach usage to subscription object for schema
+    assert subscription.id is not None
+    usage = await usage_service.get_usage(subscription.id)
+    subscription_resp = SubscriptionResponse.model_validate(subscription)
+    subscription_resp.usage = usage
+
+    return success_response(
+        data=subscription_resp, details="Subscription retrieved successfully"
+    )
+
+
+@router.post("/verify", response_model=ApiResponse[SubscriptionResponse])
 async def verify_subscription(
     request: SubscriptionVerifyRequest,
     current_user: User = Depends(get_current_user),
     service: SubscriptionService = Depends(get_subscription_service),
+    usage_service: SubscriptionUsageService = Depends(get_subscription_usage_service),
 ):
     """
     Verify a Google Play subscription and update user entitlement.
-
-    This endpoint should be called by the client after a successful purchase
-    in the app. It verifies the purchase token with Google Play and
-    updates the user's subscription record in the database.
-
-    Args:
-        request: The verification request containing product_id and purchase_token.
-        current_user: The currently authenticated user.
-        service: The subscription service instance.
-
-    Returns:
-        The updated or created subscription record.
-
-    Raises:
-        HTTPException: 400 if verification fails or 401 if user session is invalid.
     """
     if current_user.id is None:
         raise HTTPException(status_code=401, detail="User ID not found")
     try:
         subscription = await service.verify_and_save(current_user.id, request)
 
-        return subscription
+        # Attach usage
+        assert subscription.id is not None
+        usage = await usage_service.get_usage(subscription.id)
+        subscription_resp = SubscriptionResponse.model_validate(subscription)
+        subscription_resp.usage = usage
+
+        return success_response(
+            data=subscription_resp, details="Subscription verified successfully"
+        )
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.post("/resync", response_model=SubscriptionResponse)
+@router.post("/resync", response_model=ApiResponse[SubscriptionResponse])
 async def resync_subscription(
     purchase_token: str,
     current_user: User = Depends(get_current_user),
     service: SubscriptionService = Depends(get_subscription_service),
+    usage_service: SubscriptionUsageService = Depends(get_subscription_usage_service),
 ):
     """
     Resync subscription status with Google Play.
-
-    Updates the local database record by re-verifying the provided token
-    with the Google Play Developer API. Useful for recovery or restoring purchases.
-
-    Args:
-        purchase_token: The original purchase token to resync.
-        current_user: The currently authenticated user.
-        service: The subscription service instance.
-
-    Returns:
-        The updated subscription record.
-
-    Raises:
-        HTTPException: 404 if the subscription token is not found.
     """
     subscription = await service.sync_with_google(purchase_token)
     if not subscription:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Subscription not found"
         )
-    return subscription
+
+    # Attach usage
+    assert subscription.id is not None
+    usage = await usage_service.get_usage(subscription.id)
+    subscription_resp = SubscriptionResponse.model_validate(subscription)
+    subscription_resp.usage = usage
+
+    return success_response(
+        data=subscription_resp, details="Subscription resynced successfully"
+    )
 
 
-@router.post("/google/webhook")
+@router.post("/google/webhook", response_model=ApiResponse)
 async def google_play_webhook(
     payload: PubSubPayload,
     session: AsyncSession = Depends(get_async_session),
@@ -132,7 +152,9 @@ async def google_play_webhook(
     try:
         if not payload.message or not payload.message.data:
             logger.warning("Received webhook with missing data")
-            return {"status": "success"}
+            return success_response(
+                data={"status": "success"}, details="Webhook received"
+            )
 
         # Decode the Base64 data string
         decoded_data = base64.b64decode(payload.message.data).decode("utf-8")
@@ -256,4 +278,4 @@ async def google_play_webhook(
         logger.error(f"Error processing webhook: {e}")
         # Still return 200 to prevent Google from retrying malformed data
 
-    return {"status": "success"}
+    return success_response(data={"status": "success"}, details="Webhook processed")

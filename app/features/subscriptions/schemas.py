@@ -53,6 +53,7 @@ class SubscriptionResponse(BaseModel):
     auto_renew: bool
     created_at: datetime
     updated_at: datetime
+    usage: Optional["SubscriptionUsageResponse"] = None
 
     class Config:
         """Pydantic config."""

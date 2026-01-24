@@ -28,6 +28,9 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
 
 
+from app.features.subscriptions.schemas import SubscriptionResponse
+
+
 class UserResponse(UserBase):
     """Schema for user responses."""
 
@@ -36,6 +39,7 @@ class UserResponse(UserBase):
     is_superuser: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
+    subscription: Optional[SubscriptionResponse] = None
 
     class Config:
         from_attributes = True

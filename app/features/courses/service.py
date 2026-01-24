@@ -26,6 +26,8 @@ from app.features.courses.repository import (
     SubCategoryRepository,
 )
 from app.common.events import event_bus, CourseEnrolledEvent
+from app.features.subscriptions.models import Subscription, SubscriptionResourceType
+from app.features.subscriptions.usage_service import SubscriptionUsageService
 import json
 import re
 import uuid
@@ -144,13 +146,21 @@ class CourseService:
 
         return None
 
-    async def enroll_course(self, user_id: int, course_id: int) -> UserCourse:
+    async def enroll_course(
+        self,
+        user_id: int,
+        course_id: int,
+        usage_service: Optional[SubscriptionUsageService] = None,
+        subscription: Optional[Subscription] = None,
+    ) -> UserCourse:
         """
         Enroll a user in a course.
 
         Args:
             user_id: ID of the user to enroll
             course_id: ID of the course to enroll in
+            usage_service: Optional service to increment usage
+            subscription: Optional subscription to track usage for
 
         Returns:
             Created UserCourse object
@@ -178,6 +188,12 @@ class CourseService:
         if course:
             course.total_enrollees += 1
             await self.repository.update(course)
+
+        # Increment usage if service and subscription are provided
+        if usage_service and subscription:
+            await usage_service.increment_usage(
+                subscription, SubscriptionResourceType.JOURNEY
+            )
 
         # Emit course enrolled event
         event_bus.dispatch(CourseEnrolledEvent(user_id=user_id, course_id=course_id))

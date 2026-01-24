@@ -7,10 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.config import settings
 from app.common.deps import get_current_user, get_async_session
 from app.features.users.models import User
-from .models import Subscription
+from .models import Subscription, SubscriptionResourceType
 from .service import SubscriptionService
 from .repository import SubscriptionRepository
 from .usage_repository import SubscriptionUsageRepository
+from .usage_service import SubscriptionUsageService
 from .google_play_service import GooglePlayService
 
 
@@ -22,6 +23,17 @@ async def get_subscription_service(
         repository=SubscriptionRepository(session),
         google_play=GooglePlayService(),
         usage_repository=SubscriptionUsageRepository(session),
+    )
+
+
+async def get_subscription_usage_service(
+    session: AsyncSession = Depends(get_async_session),
+    sub_service: SubscriptionService = Depends(get_subscription_service),
+) -> SubscriptionUsageService:
+    """Dependency to provide SubscriptionUsageService."""
+    return SubscriptionUsageService(
+        repository=SubscriptionUsageRepository(session),
+        subscription_service=sub_service,
     )
 
 
@@ -45,7 +57,7 @@ async def get_user_subscription(
     if current_user.id is None:
         raise HTTPException(status_code=401, detail="User ID not found")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     # Step 1: Try to get active subscription
     subscription = await service.get_active_subscription(current_user.id)
@@ -113,3 +125,65 @@ async def get_premium_user(
         )
 
     return current_user
+
+
+class ResourceAccessControl:
+    """
+    Dependency for checking if a user has access to a specific resource
+    based on their subscription plan and monthly usage limits.
+    """
+
+    def __init__(self, access_resource: SubscriptionResourceType):
+        """
+        Initialize the dependency with the resource type to check.
+
+        Args:
+            access_resource: The resource type (SubscriptionResourceType).
+        """
+        self.access_resource = access_resource
+
+    async def __call__(
+        self,
+        subscription: Subscription = Depends(get_user_subscription),
+        service: SubscriptionService = Depends(get_subscription_service),
+        usage_service: SubscriptionUsageService = Depends(
+            get_subscription_usage_service
+        ),
+    ) -> None:
+        """
+        Check if the user has reached their monthly usage limit for the resource.
+        Only applies to users on the free plan.
+        """
+        # Premium users (active subscriptions that aren't the free plan) have unlimited access
+        if not service.is_free_plan(subscription):
+            return
+
+        if not subscription.id:
+            # Should not happen with current app architecture, but good to be safe
+            return
+
+        # Get current usage via usage service
+        usage = await usage_service.get_usage(subscription.id)
+
+        # Check limits based on resource type
+        if self.access_resource == SubscriptionResourceType.JOURNEY:
+            if (
+                usage.learning_journeys_used
+                >= settings.FREE_PLAN_LEARNING_JOURNEYS_LIMIT
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Monthly limit for learning journeys reached on Free plan. Upgrade to Premium for unlimited access!",
+                )
+        elif self.access_resource == SubscriptionResourceType.LESSON:
+            if usage.lessons_used >= settings.FREE_PLAN_LESSONS_LIMIT:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Monthly limit for lessons reached on Free plan. Upgrade to Premium for unlimited access!",
+                )
+        elif self.access_resource == SubscriptionResourceType.AUDIO:
+            if usage.audio_lessons_used >= settings.FREE_PLAN_AUDIO_LESSONS_LIMIT:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Monthly limit for audio lessons reached on Free plan. Upgrade to Premium for unlimited access!",
+                )

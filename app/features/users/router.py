@@ -19,16 +19,39 @@ from app.features.users.schemas import (
 from app.features.users.service import UserService
 from app.features.auth.otp_service import OTPService
 from app.features.auth.otp_repository import OTPRepository
+from app.features.subscriptions.dependencies import (
+    get_user_subscription,
+    get_subscription_usage_service,
+)
+from app.features.subscriptions.models import Subscription
+from app.features.subscriptions.schemas import SubscriptionResponse
+from app.features.subscriptions.usage_service import SubscriptionUsageService
+
 
 router = APIRouter()
 
 
 @router.get("/me", response_model=ApiResponse[UserResponse])
-async def read_users_me(current_user: UserModel = Depends(get_current_active_user)):
+async def read_users_me(
+    current_user: UserModel = Depends(get_current_active_user),
+    subscription: Subscription = Depends(get_user_subscription),
+    usage_service: SubscriptionUsageService = Depends(get_subscription_usage_service),
+):
     """Get current user information."""
     try:
+        # Attach subscription to user object for UserResponse schema
+        user_response = UserResponse.model_validate(current_user)
+
+        # Attach usage to subscription response
+        assert subscription.id is not None
+        usage = await usage_service.get_usage(subscription.id)
+        subscription_resp = SubscriptionResponse.model_validate(subscription)
+        subscription_resp.usage = usage
+
+        user_response.subscription = subscription_resp
+
         return success_response(
-            data=current_user, details="Current user retrieved successfully"
+            data=user_response, details="Current user retrieved successfully"
         )
     except HTTPException as e:
         traceback.print_exc()

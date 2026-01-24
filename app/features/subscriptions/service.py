@@ -30,7 +30,9 @@ class SubscriptionService:
     def _parse_google_response(self, google_resp: dict) -> Tuple[datetime, bool]:
         """Extract expiry time and auto_renew from Google Play response."""
         expiry_millis = int(google_resp.get("expiryTimeMillis", 0))
-        expiry_date = datetime.fromtimestamp(expiry_millis / 1000, tz=timezone.utc)
+        expiry_date = datetime.fromtimestamp(
+            expiry_millis / 1000, tz=timezone.utc
+        ).replace(tzinfo=None)
         auto_renew = google_resp.get("autoRenewing", False) or False
         return expiry_date, auto_renew
 
@@ -38,7 +40,7 @@ class SubscriptionService:
         """Map Google Play response to internal status."""
         expiry_date, _ = self._parse_google_response(google_resp)
 
-        if expiry_date < datetime.now(timezone.utc):
+        if expiry_date < datetime.now(timezone.utc).replace(tzinfo=None):
             return SubscriptionStatus.EXPIRED
 
         # paymentState: 1 = Received, 2 = Free trial
@@ -57,7 +59,7 @@ class SubscriptionService:
     async def _init_usage_tracking(self, subscription_id: int) -> None:
         """Initialize or refresh usage tracking for new period."""
         if self.usage_repository:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
             await self.usage_repository.get_or_create_for_subscription(
                 subscription_id, now.year, now.month
             )
@@ -111,17 +113,21 @@ class SubscriptionService:
 
     FREE_PRODUCT_ID = "free"
 
+    def is_free_plan(self, subscription: Subscription) -> bool:
+        """Check if a subscription is on the free plan."""
+        return subscription.product_id == self.FREE_PRODUCT_ID
+
     async def get_active_subscription(self, user_id: int) -> Optional[Subscription]:
         """Get user's current valid subscription."""
         sub = await self.repository.get_active_by_user_id(user_id)
-        if sub and sub.expiry_time > datetime.now(timezone.utc):
+        if sub and sub.expiry_time > datetime.now(timezone.utc).replace(tzinfo=None):
             return sub
         return None
 
     async def create_free_subscription(self, user_id: int) -> Subscription:
         """Deactivate old plans and start a fresh free plan."""
         await self.repository.deactivate_all_for_user(user_id)
-        expiry = datetime.now(timezone.utc) + timedelta(days=30)
+        expiry = (datetime.now(timezone.utc) + timedelta(days=30)).replace(tzinfo=None)
 
         sub = Subscription(
             user_id=user_id,

@@ -10,13 +10,19 @@ from app.features.courses.schemas import (
     LessonOverview,
 )
 from app.services.langchain_service import langchain_service
+from app.features.subscriptions.models import Subscription, SubscriptionResourceType
+from app.features.subscriptions.usage_service import SubscriptionUsageService
+from typing import List, Union, Optional
 
 
 class CourseGenerationService:
     """Service for AI-powered course generation."""
 
     async def generate_courses(
-        self, request: CourseGenerationRequest
+        self,
+        request: CourseGenerationRequest,
+        usage_service: Optional[SubscriptionUsageService] = None,
+        subscription: Optional[Subscription] = None,
     ) -> List[CourseOutline]:
         """
         Generate personalized course curricula using LangChain.
@@ -86,4 +92,11 @@ Make the courses practical, engaging, and suitable for {request.level} learners.
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to generate courses: {response}",
             )
+
+        # Increment usage if service and subscription are provided
+        if usage_service and subscription:
+            await usage_service.increment_usage(
+                subscription, SubscriptionResourceType.JOURNEY
+            )
+
         return response.courses

@@ -15,6 +15,14 @@ class SubscriptionStatus(str, Enum):
     PAUSED = "paused"
 
 
+class SubscriptionResourceType(str, Enum):
+    """Resource types tracked by subscriptions."""
+
+    JOURNEY = "journeys"
+    LESSON = "lessons"
+    AUDIO = "audio"
+
+
 class Subscription(SQLModel, table=True):
     """Subscription model for database."""
 

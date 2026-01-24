@@ -26,7 +26,10 @@ class LogRepository:
     async def get_all(self, skip: int = 0, limit: int = 100) -> List[Log]:
         """Get all log entries."""
         result = await self.session.execute(
-            select(Log).order_by(desc(Log.created_at)).offset(skip).limit(limit)
+            select(Log)
+            .order_by(desc(Log.created_at))  # ty:ignore[invalid-argument-type]
+            .offset(skip)
+            .limit(limit)
         )
         return list(result.scalars().all())
 

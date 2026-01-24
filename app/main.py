@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.common.config import settings
 from app.common.database.session import init_db, close_db
 from app.common.events.bus import event_bus
+from app.common.responses import ApiResponse, success_response
 from app.features.auth.router import router as auth_router
 from app.features.users.router import router as users_router
 from app.features.courses.router import router as courses_router
@@ -126,16 +127,19 @@ app.include_router(
 )
 
 
-@app.get("/")
+@app.get("/", response_model=ApiResponse)
 async def root():
-    return {
-        "message": "Welcome to LearnItIn API",
-        "version": settings.APP_VERSION,
-        "docs": "/docs",
-        "redoc": "/redoc",
-    }
+    return success_response(
+        data={
+            "message": "Welcome to LearnItIn API",
+            "version": settings.APP_VERSION,
+            "docs": "/docs",
+            "redoc": "/redoc",
+        },
+        details="Welcome to LearnItIn API",
+    )
 
 
-@app.get("/health")
+@app.get("/health", response_model=ApiResponse)
 async def health_check():
-    return {"status": "healthy"}
+    return success_response(data={"status": "healthy"}, details="Service is healthy")

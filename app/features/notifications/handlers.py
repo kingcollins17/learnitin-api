@@ -13,6 +13,7 @@ async def handle_in_app_push_for_fcm(event: NotificationInAppPushEvent):
     Handler for NOTIFICATION_IN_APP_PUSH events.
     Triggers a Firebase Cloud Messaging push notification if the user has a device token.
     """
+    print("Handling in app push for FCM")
     user_id = event.user_id
     title = event.title
     message = event.message

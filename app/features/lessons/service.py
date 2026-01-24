@@ -18,6 +18,8 @@ from app.features.courses.repository import CourseRepository, UserCourseReposito
 from app.features.lessons.lecture_service import lecture_conversion_service
 from app.services.audio_generation_service import audio_generation_service
 from app.services.storage_service import firebase_storage_service
+from app.features.subscriptions.models import Subscription, SubscriptionResourceType
+from app.features.subscriptions.usage_service import SubscriptionUsageService
 
 
 class LessonService:
@@ -319,7 +321,13 @@ class UserLessonService:
         self.user_module_service = UserModuleService(session)
 
     async def start_lesson(
-        self, user_id: int, lesson_id: int, module_id: int, course_id: int
+        self,
+        user_id: int,
+        lesson_id: int,
+        module_id: int,
+        course_id: int,
+        usage_service: Optional[SubscriptionUsageService] = None,
+        subscription: Optional[Subscription] = None,
     ) -> UserLesson:
         """
         Start a lesson for a user (create user lesson record).
@@ -406,6 +414,12 @@ class UserLessonService:
             user_course.current_module_id = module_id
             user_course.updated_at = datetime.now(timezone.utc)
             await self.user_course_repo.update(user_course)
+
+        # Increment usage if service and subscription are provided
+        if usage_service and subscription:
+            await usage_service.increment_usage(
+                subscription, SubscriptionResourceType.LESSON
+            )
 
         return created_user_lesson
 
@@ -517,22 +531,38 @@ class UserLessonService:
             update_data={"is_lesson_unlocked": True},
         )
 
-    async def unlock_audio(self, user_id: int, lesson_id: int) -> UserLesson:
+    async def unlock_audio(
+        self,
+        user_id: int,
+        lesson_id: int,
+        usage_service: Optional[SubscriptionUsageService] = None,
+        subscription: Optional[Subscription] = None,
+    ) -> UserLesson:
         """
         Unlock audio for a lesson.
 
         Args:
             user_id: ID of the user
             lesson_id: ID of the lesson
+            usage_service: Optional service to increment usage
+            subscription: Optional subscription to track usage for
 
         Returns:
             Updated UserLesson object
         """
-        return await self.update_user_lesson(
+        user_lesson = await self.update_user_lesson(
             user_id=user_id,
             lesson_id=lesson_id,
             update_data={"is_audio_unlocked": True},
         )
+
+        # Increment usage if service and subscription are provided
+        if usage_service and subscription:
+            await usage_service.increment_usage(
+                subscription, SubscriptionResourceType.AUDIO
+            )
+
+        return user_lesson
 
     async def complete_quiz(self, user_id: int, lesson_id: int) -> UserLesson:
         """

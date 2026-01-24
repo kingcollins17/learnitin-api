@@ -10,12 +10,22 @@ from fastapi import (
     BackgroundTasks,
 )
 from typing import List, Optional
+from app.features.subscriptions.service import SubscriptionService
 import traceback
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.database.session import get_async_session, AsyncSessionLocal
 from app.common.deps import get_current_active_user
 from app.common.responses import ApiResponse, success_response
 from app.features.users.models import User
+from app.features.subscriptions.dependencies import (
+    ResourceAccessControl,
+    get_user_subscription,
+    get_subscription_service,
+    get_subscription_usage_service,
+)
+from app.features.subscriptions.service import SubscriptionService
+from app.features.subscriptions.usage_service import SubscriptionUsageService
+from app.features.subscriptions.models import Subscription, SubscriptionResourceType
 from app.features.lessons.schemas import (
     LessonResponse,
     LessonDetailResponse,
@@ -180,6 +190,9 @@ async def start_lesson(
     lesson_id: int,
     session: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user),
+    _access: None = Depends(ResourceAccessControl(SubscriptionResourceType.LESSON)),
+    subscription: Subscription = Depends(get_user_subscription),
+    usage_service: SubscriptionUsageService = Depends(get_subscription_usage_service),
 ):
     """
     Start a lesson (create user lesson progress record).
@@ -219,6 +232,8 @@ async def start_lesson(
             lesson_id=lesson_id,
             module_id=lesson.module_id,
             course_id=lesson.course_id,
+            usage_service=usage_service,
+            subscription=subscription,
         )
 
         # 3. Check and generate content if missing
@@ -228,9 +243,6 @@ async def start_lesson(
             module_id=lesson.module_id,
             course_id=lesson.course_id,
         )
-
-        # 4. Unlock lesson automatically (NOTE: service already does this on creation, but if we updated existing, it's also handled there)
-        # We can just return user_lesson now as service handles unlocking logic.
 
         return success_response(
             data=user_lesson,
@@ -462,6 +474,9 @@ async def unlock_audio(
     lesson_id: int = Query(..., description="ID of the lesson"),
     session: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user),
+    _access: None = Depends(ResourceAccessControl(SubscriptionResourceType.AUDIO)),
+    subscription: Subscription = Depends(get_user_subscription),
+    usage_service: SubscriptionUsageService = Depends(get_subscription_usage_service),
 ):
     """
     Unlock audio for a lesson.
@@ -482,10 +497,12 @@ async def unlock_audio(
                 detail="Lesson not found",
             )
 
-        # 2. Unlock audio for user
+        # 2. Unlock audio for user (usage increment is now inside this service call)
         user_lesson = await service.unlock_audio(
             user_id=current_user.id,
             lesson_id=lesson_id,
+            usage_service=usage_service,
+            subscription=subscription,
         )
         await session.commit()
 

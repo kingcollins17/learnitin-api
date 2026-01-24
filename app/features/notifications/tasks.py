@@ -30,7 +30,7 @@ async def send_push_notification_task(
         user = await user_repo.get_by_id(user_id)
 
         if not user or not user.device_reg_token:
-            logger.debug(
+            print(
                 f"User {user_id} not found or has no device_reg_token. Skipping push notification."
             )
             return
@@ -47,12 +47,12 @@ async def send_push_notification_task(
         # Add common metadata
         fcm_data["click_action"] = "FLUTTER_NOTIFICATION_CLICK"
 
-        logger.info(f"Sending push notification to user {user_id}")
+        print(f"Sending push notification to user {user_id}")
         response = firebase_fcm_service.send_to_token(
             token=user.device_reg_token, title=title, body=body, data=fcm_data
         )
 
         if response:
-            logger.info(f"Push notification sent successfully: {response}")
+            print(f"Push notification sent successfully: {response}")
         else:
-            logger.warning(f"Failed to send push notification to user {user_id}")
+            print(f"Failed to send push notification to user {user_id}")

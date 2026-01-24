@@ -8,6 +8,14 @@ from app.common.database.session import get_async_session
 from app.common.deps import get_current_active_user
 from app.common.responses import ApiResponse, success_response
 from app.features.users.models import User
+from app.features.subscriptions.dependencies import (
+    ResourceAccessControl,
+    get_user_subscription,
+    get_subscription_service,
+    get_subscription_usage_service,
+)
+from app.features.subscriptions.usage_service import SubscriptionUsageService
+from app.features.subscriptions.models import Subscription, SubscriptionResourceType
 from app.features.courses.schemas import (
     CourseGenerationRequest,
     CourseGenerationResponse,
@@ -43,6 +51,9 @@ async def generate_courses(
     request: CourseGenerationRequest,
     session: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user),
+    _access: None = Depends(ResourceAccessControl(SubscriptionResourceType.JOURNEY)),
+    subscription: Subscription = Depends(get_user_subscription),
+    usage_service: SubscriptionUsageService = Depends(get_subscription_usage_service),
 ):
     """
     Generate personalized course curricula using AI.
@@ -56,12 +67,13 @@ async def generate_courses(
     **Authentication required.**
     """
     try:
-        generation_service = CourseGenerationService()
-        courses = await generation_service.generate_courses(request)
+        # Generate courses via service
+        service = CourseGenerationService()
+        outlines = await service.generate_courses(request, usage_service, subscription)
 
         return success_response(
-            data=CourseGenerationResponse(courses=courses),
-            details=f"Successfully generated {len(courses)} course(s)",
+            data=CourseGenerationResponse(courses=outlines),
+            details=f"Successfully generated {len(outlines)} course(s)",
         )
     except HTTPException:
         traceback.print_exc()
@@ -91,7 +103,7 @@ async def create_course(
         service = CourseService(session)
         course = await service.create_course(current_user.id, course_data)
 
-        # Enroll the creator in the course
+        # Enroll the creator in the course (optional: could pass usage here too if tracking)
         assert course.id
         await service.enroll_course(current_user.id, course.id)
 
@@ -281,6 +293,9 @@ async def enroll_course(
     course_id: int,
     session: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user),
+    _access: None = Depends(ResourceAccessControl(SubscriptionResourceType.JOURNEY)),
+    subscription: Subscription = Depends(get_user_subscription),
+    usage_service: SubscriptionUsageService = Depends(get_subscription_usage_service),
 ):
     """
     Enroll the current user in a course.
@@ -290,7 +305,9 @@ async def enroll_course(
     try:
         assert current_user.id  # Ensure user has an ID
         service = CourseService(session)
-        user_course = await service.enroll_course(current_user.id, course_id)
+        user_course = await service.enroll_course(
+            current_user.id, course_id, usage_service, subscription
+        )
 
         return success_response(
             data=user_course, details="Successfully enrolled in course"

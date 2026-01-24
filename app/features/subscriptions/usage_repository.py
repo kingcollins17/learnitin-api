@@ -5,7 +5,7 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from .models import SubscriptionUsage
+from .models import SubscriptionUsage, SubscriptionResourceType
 
 
 class SubscriptionUsageRepository:
@@ -78,14 +78,14 @@ class SubscriptionUsageRepository:
         return new_usage
 
     async def increment_usage(
-        self, subscription_id: int, feature: str
+        self, subscription_id: int, feature: SubscriptionResourceType
     ) -> SubscriptionUsage:
         """
         Increment usage counter for a specific feature.
 
         Args:
             subscription_id: The ID of the subscription.
-            feature: The feature type ('journey', 'lesson', 'audio').
+            feature: The resource type (SubscriptionResourceType).
 
         Returns:
             The updated SubscriptionUsage.
@@ -98,11 +98,11 @@ class SubscriptionUsageRepository:
             subscription_id, now.year, now.month
         )
 
-        if feature == "journey":
+        if feature == SubscriptionResourceType.JOURNEY:
             usage.learning_journeys_used += 1
-        elif feature == "lesson":
+        elif feature == SubscriptionResourceType.LESSON:
             usage.lessons_used += 1
-        elif feature == "audio":
+        elif feature == SubscriptionResourceType.AUDIO:
             usage.audio_lessons_used += 1
         else:
             raise ValueError(f"Unknown feature: {feature}")
