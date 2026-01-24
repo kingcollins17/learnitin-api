@@ -12,8 +12,10 @@ from app.features.lessons.router import router as lessons_router
 from app.features.notifications.router import router as notifications_router
 from app.features.quiz.router import router as quiz_router
 from app.features.subscriptions.router import router as subscriptions_router
+from app.features.logs.router import router as logs_router
 from app.features.notifications.handlers import handle_in_app_push_for_fcm
-from app.common.events import NotificationInAppPushEvent
+from app.features.logs.handlers import handle_log_event
+from app.common.events import NotificationInAppPushEvent, LogEvent
 
 
 @asynccontextmanager
@@ -26,6 +28,9 @@ async def lifespan(app: FastAPI):
     event_bus.on(
         NotificationInAppPushEvent, handle_in_app_push_for_fcm
     )  # ty:ignore[no-matching-overload]
+
+    # Register log event handler
+    event_bus.on(LogEvent, handle_log_event)  # type: ignore
 
     # Register subscription event handlers for Google Play webhooks
     from app.features.subscriptions.events import (
@@ -111,8 +116,13 @@ app.include_router(
 )
 app.include_router(
     subscriptions_router,
-    prefix=f"{settings.API_V1_PREFIX}",
+    prefix=f"{settings.API_V1_PREFIX}/billing",
     tags=["Subscriptions"],
+)
+app.include_router(
+    logs_router,
+    prefix=f"{settings.API_V1_PREFIX}/logs",
+    tags=["Logs"],
 )
 
 

@@ -142,3 +142,17 @@ class NotificationInAppPushEvent(AppEvent):
     in_app_event: Optional[InAppEventType] = None
     data: Optional[Dict[str, Any]] = None
     created_at: Optional[str] = None
+
+
+# --- Log Events ---
+
+
+class LogLevel(str, Enum):
+    INFO = "info"
+    ERROR = "error"
+
+
+class LogEvent(AppEvent):
+    level: LogLevel = LogLevel.INFO
+    message: str
+    data: Optional[Dict[str, Any]] = None

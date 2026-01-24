@@ -60,6 +60,7 @@ async def init_db() -> None:
         Subscription,
         SubscriptionUsage,
     )  # noqa: F401
+    from app.features.logs.models import Log  # noqa: F401
 
     async with engine.begin() as conn:
         # Create all tables

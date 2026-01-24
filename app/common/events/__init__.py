@@ -21,6 +21,8 @@ from .schemas import (
     AudioGenerationFailedEvent,
     NotificationInAppPushEvent,
     QuizGeneratedEvent,
+    LogEvent,
+    LogLevel,
 )
 
 __all__ = [
@@ -46,4 +48,6 @@ __all__ = [
     "AudioGenerationFailedEvent",
     "NotificationInAppPushEvent",
     "QuizGeneratedEvent",
+    "LogEvent",
+    "LogLevel",
 ]

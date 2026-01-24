@@ -8,9 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.deps import get_current_user, get_async_session
-from app.common.events.bus import event_bus
+from app.common.events import LogEvent, LogLevel, event_bus
 from app.features.users.models import User
-
 from .events import (
     SubscriptionPurchasedEvent,
     SubscriptionRenewedEvent,
@@ -135,6 +134,16 @@ async def google_play_webhook(payload: PubSubPayload):
         # Decode the Base64 data string
         decoded_data = base64.b64decode(payload.message.data).decode("utf-8")
         notification_json = json.loads(decoded_data)
+
+        # Dispatch LogEvent with the decoded JSON data
+        await event_bus.dispatch(
+            LogEvent(
+                level=LogLevel.INFO,
+                message=f"Google Play Webhook Received: {notification_json.get('packageName', 'Unknown package')}",
+                data=notification_json,
+            )
+        )
+
         play_data = GooglePlayNotification(**notification_json)
 
         logger.info(f"Received Google Play notification for: {play_data.packageName}")
