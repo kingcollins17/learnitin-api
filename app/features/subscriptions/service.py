@@ -260,7 +260,7 @@ class SubscriptionService:
         return await self._finalize_and_notify(
             new_sub,
             title="Subscription Renewed",
-            message=f"Good news! Your {existing.product_id.replace('_', ' ').title()} subscription has been successfully renewed.",
+            message=f"Your {existing.product_id.replace('_', ' ').title()} subscription has been successfully renewed.",
             in_app_event=InAppEventType.SUBSCRIPTION_PURCHASED,
         )
 
