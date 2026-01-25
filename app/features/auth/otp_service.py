@@ -1,10 +1,14 @@
 import secrets
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from app.features.auth.otp_models import OTP
 from app.features.auth.otp_repository import OTPRepository
-from app.services.email_service import email_service
+from app.services.stytch_service import stytch_service
+
+
+logger = logging.getLogger(__name__)
 
 
 class OTPService:
@@ -26,66 +30,53 @@ class OTPService:
             phone_number=phone_number,
         )
 
-        # Generate a 6-digit code
-        code = "".join([str(secrets.randbelow(10)) for _ in range(6)])
-
-        # Create OTP record
+        # Create OTP record (code will be updated with method_id)
         otp = OTP(
             email=email,
             phone_number=phone_number,
-            code=code,
+            code="",  # Placeholder, will be replaced by Stytch method_id
             duration_minutes=10,
             created_at=datetime.now(timezone.utc),
         )
 
-        created_otp = await self.otp_repository.create(otp)
-
-        # Send Email if email is provided
+        # Call Stytch to send OTP
+        method_id = ""
         if email:
-            # simple text template for now, or we could add a jinja template later
-            # For now assuming we might not have a template, so sending a basic email
-            # actually the email_service requires a template_name.
-            # I should probably create a basic template or just use a placeholder if I can't.
-            # Let's assume there is an 'otp_code.html' or similar needed, but for now I'll use a generic one
-            # or try to use a default.
-            # Wait, the user said "uses @[app/services/email_service.py] for sending otps".
-            # I must use it. The email_service.send_email takes template_name.
-            # I will assume "otp_verification.html" exists or will be created.
-            # I'll update the plan to include creating an email template if needed, but the user didn't explicitly ask for it.
-            # I'll just call it with 'otp_verification.html' and pass the code.
+            method_id = await stytch_service.send_email_otp(email)
 
-            try:
-                email_service.send_email(
-                    to_email=email,
-                    subject="Your Verification Code",
-                    template_name="otp_verification.html",
-                    context={"code": code, "duration_minutes": 10},
-                )
-            except Exception as e:
-                # Log error but don't fail the request generally, or maybe we should?
-                # Ideally we want to know if it failed.
-                print(f"Failed to send email: {e}")
+        if not method_id and email:
+            logger.error(f"Failed to send OTP via Stytch to {email}")
+            # We continue but the record won't be very useful without a method_id
+
+        # We store the method_id in the 'code' field so we can retrieve it for verification
+        # The actual 6-digit code is handled by Stytch and not known to us.
+        otp.code = method_id
+        created_otp = await self.otp_repository.create(otp)
 
         return created_otp
 
     async def verify_otp(
         self, code: str, email: Optional[str] = None, phone_number: Optional[str] = None
     ) -> bool:
-        """Verify an OTP."""
-        otp = await self.otp_repository.get_valid_otp(code, email, phone_number)
+        """Verify an OTP using Stytch."""
+        if email:
+            # For Stytch, we need the method_id which we stored in the DB's 'code' field.
+            # We look up the most recent valid OTP record for this email.
+            # Using a simplified lookup:
+            otp = await self.otp_repository.get_valid_otp_for_email(email)
+            if not otp:
+                return False
 
-        if not otp:
+            # The 'code' argument passed to this function is the 6-digit code from the user.
+            # The 'otp.code' in our DB is the Stytch method_id.
+            is_valid = await stytch_service.verify_email_otp(otp.code, code)
+
+            if is_valid:
+                await self.otp_repository.mark_as_used(otp)
+                return True
             return False
 
-        # Check expiration (ensure comparison is between naive datetimes as MySQL stores naive)
-        expiration_time = otp.created_at + timedelta(minutes=otp.duration_minutes)
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
-        if now > expiration_time:
-            return False
-
-        # Mark as used
-        await self.otp_repository.mark_as_used(otp)
-        return True
+        return False
 
     async def cleanup_expired_otps(self) -> int:
         """Cleanup expired OTPs."""
@@ -95,42 +86,19 @@ class OTPService:
         self, code: str, user_email: str
     ) -> bool:
         """
-        Verify that an OTP code exists and belongs to the specified user.
-
-        This method:
-        1. Retrieves the OTP by code (regardless of is_used status)
-        2. Validates that the OTP is associated with the user's email
-        3. Marks the OTP as used
-
-        Args:
-            code: The OTP code to verify
-            user_email: The email address of the user who should own this OTP
-
-        Returns:
-            True if the OTP is valid and belongs to the user
-
-        Raises:
-            ValueError: If OTP is invalid, not associated with an email, or doesn't belong to the user
+        Verify that an OTP code exists and belongs to the specified user using Stytch.
         """
-        # Get OTP by code (regardless of is_used status)
-        otp = await self.otp_repository.get_otp_by_code(code)
+        # Find the method_id from our database
+        otp = await self.otp_repository.get_valid_otp_for_email(user_email)
 
         if not otp:
-            raise ValueError("Invalid OTP code")
+            raise ValueError("No valid OTP request found for this user")
 
-        # Check if OTP has an email associated with it
-        if not otp.email:
-            raise ValueError("OTP is not associated with an email")
+        # Call Stytch for verification (code is the user input, otp.code is the method_id)
+        is_valid = await stytch_service.verify_email_otp(otp.code, code)
 
-        # Verify that the OTP belongs to the specified user
-        if otp.email != user_email:
-            raise ValueError("This OTP code does not belong to your account")
-
-        # Check expiration
-        expiration_time = otp.created_at + timedelta(minutes=otp.duration_minutes)
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
-        if now > expiration_time:
-            raise ValueError("OTP code has expired")
+        if not is_valid:
+            raise ValueError("Invalid or expired OTP code")
 
         # Mark OTP as used
         await self.otp_repository.mark_as_used(otp)

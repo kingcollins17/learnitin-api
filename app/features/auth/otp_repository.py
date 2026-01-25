@@ -89,3 +89,13 @@ class OTPRepository:
         query = select(OTP).where(OTP.code == code).order_by(desc(OTP.created_at))
         result = await self.session.execute(query)
         return result.scalars().first()
+
+    async def get_valid_otp_for_email(self, email: str) -> Optional[OTP]:
+        """Get the latest unused OTP record for an email (contains Stytch method_id)."""
+        query = (
+            select(OTP)
+            .where(OTP.email == email, OTP.is_used == False)
+            .order_by(desc(OTP.created_at))
+        )
+        result = await self.session.execute(query)
+        return result.scalars().first()

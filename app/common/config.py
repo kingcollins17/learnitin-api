@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     FREE_PLAN_LESSONS_LIMIT: int = Field(default=10)
     FREE_PLAN_AUDIO_LESSONS_LIMIT: int = Field(default=5)
 
+    # Stytch
+    STYTCH_PROJECT_ID: str = Field(default="")
+    STYTCH_SECRET: str = Field(default="")
+    STYTCH_ENVIRONMENT: str = Field(default="test")  # "test" or "live"
+
     # Subscription Grace Period (days after expiry before demotion to free)
     SUBSCRIPTION_GRACE_PERIOD_DAYS: int = Field(default=3)
 

@@ -147,6 +147,7 @@ uuid7==0.1.0
 uuid_utils==0.12.0
 uvicorn==0.40.0
 uvloop==0.22.1
+stytch==14.1.0
 watchfiles==1.1.1
 websockets==15.0.1
 xxhash==3.6.0
