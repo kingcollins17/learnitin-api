@@ -13,6 +13,7 @@ from app.features.subscriptions.dependencies import (
     get_user_subscription,
     get_subscription_service,
     get_subscription_usage_service,
+    get_premium_user,
 )
 from app.features.subscriptions.usage_service import SubscriptionUsageService
 from app.features.subscriptions.models import Subscription, SubscriptionResourceType
@@ -205,7 +206,7 @@ async def publish_course(
     publish_data: CoursePublishRequest,
     background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_premium_user),
 ):
     """
     Publish a course to make it public.
@@ -255,7 +256,7 @@ async def publish_course(
 async def unpublish_course(
     course_id: int,
     session: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_premium_user),
 ):
     """
     Unpublish a course to make it private.
