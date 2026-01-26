@@ -13,6 +13,9 @@ from app.common.events import (
 )
 
 
+from app.features.lessons.lesson_audio_tracker import audio_tracker
+
+
 async def generate_audio_background(
     lesson_id: int, session: AsyncSession, user_id: Optional[int] = None
 ):
@@ -108,3 +111,6 @@ async def generate_audio_background(
                     error=str(e),
                 )
             )
+    finally:
+        # Stop tracking so new generation can be requested if needed
+        audio_tracker.stop_tracking(lesson_id)

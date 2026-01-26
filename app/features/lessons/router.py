@@ -47,6 +47,7 @@ from app.features.courses.repository import CourseRepository, UserCourseReposito
 from app.features.modules.repository import ModuleRepository
 from app.features.lessons.generation_service import lesson_generation_service
 from app.features.lessons.tasks import generate_audio_background
+from app.features.lessons.lesson_audio_tracker import audio_tracker
 
 router = APIRouter()
 
@@ -517,14 +518,17 @@ async def unlock_audio(
                     detail="Lesson content is empty, cannot generate audio.",
                 )
 
-            # Trigger background generation
-            background_tasks.add_task(
-                generate_audio_background,
-                lesson_id=lesson_id,
-                session=session,
-                user_id=current_user.id,
-            )
-            message = "Audio is being prepared. Please check back shortly."
+            # Trigger background generation if not already in progress
+            if audio_tracker.start_tracking(lesson_id, current_user.id):
+                background_tasks.add_task(
+                    generate_audio_background,
+                    lesson_id=lesson_id,
+                    session=session,
+                    user_id=current_user.id,
+                )
+                message = "Audio is being prepared. Please check back shortly."
+            else:
+                message = "Audio is already being prepared. Please check back shortly."
 
         # Prepare response with audio parts
         response = UserLessonResponse.model_validate(user_lesson)
@@ -630,6 +634,7 @@ async def generate_audio(
     **Authentication required.**
     """
     try:
+        assert current_user.id
         service = LessonService(session)
         lesson = await service.get_lesson_by_id(lesson_id)
 
@@ -639,17 +644,23 @@ async def generate_audio(
                 detail="Lesson not found",
             )
 
-        bg.add_task(
-            generate_audio_background,
-            lesson_id=lesson_id,
-            session=session,
-            user_id=current_user.id,
-        )
+        if audio_tracker.start_tracking(lesson_id, current_user.id):
+            bg.add_task(
+                generate_audio_background,
+                lesson_id=lesson_id,
+                session=session,
+                user_id=current_user.id,
+            )
 
-        return success_response(
-            data=lesson,
-            details="Audio generation started in background",
-        )
+            return success_response(
+                data=lesson,
+                details="Audio generation started in background",
+            )
+        else:
+            return success_response(
+                data=lesson,
+                details="Audio generation is already in progress",
+            )
     except HTTPException:
         raise
     except Exception as e:
