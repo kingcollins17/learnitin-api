@@ -72,6 +72,10 @@ async def generate_courses(
         service = CourseGenerationService()
         outlines = await service.generate_courses(request, usage_service, subscription)
 
+        # Set the level for each generated course
+        for outline in outlines:
+            outline.level = request.level
+
         return success_response(
             data=CourseGenerationResponse(courses=outlines),
             details=f"Successfully generated {len(outlines)} course(s)",

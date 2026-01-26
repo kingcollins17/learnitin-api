@@ -34,6 +34,9 @@ class CourseOutline(BaseModel):
     title: str = Field(description="Course title")
     description: str = Field(description="Course description")
     duration: str = Field(description="Total estimated duration")
+    level: CourseLevel = Field(
+        default=CourseLevel.BEGINNER, description="The difficulty level of the course"
+    )
     outline: List[ModuleOverview] = Field(description="List of modules in the course")
 
 
@@ -41,9 +44,9 @@ class CourseGenerationRequest(BaseModel):
     """Request schema for generating courses."""
 
     topic: str = Field(description="The topic or subject to learn")
-    level: str = Field(
-        description="Difficulty level (e.g., 'beginner', 'intermediate', 'advanced')",
-        default="intermediate",
+    level: CourseLevel = Field(
+        description="Difficulty level (e.g., 'beginner', 'intermediate', 'expert')",
+        default=CourseLevel.INTERMEDIATE,
     )
     learning_pace: str = Field(
         description="Learning Pace eg(fast, balanced, thorough)", default="balanced"

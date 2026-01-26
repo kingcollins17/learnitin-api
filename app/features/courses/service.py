@@ -64,7 +64,7 @@ class CourseService:
             duration=course_data.duration,
             is_public=False,  # Default to private
             learning_pace=LearningPace.BALANCED,  # Default values
-            level=CourseLevel.BEGINNER,
+            level=course_data.level,
         )
 
         course = await self.repository.create(course)
