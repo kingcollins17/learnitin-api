@@ -122,6 +122,9 @@ class CourseRepository:
         if search:
             query = query.where(col(Course.title).contains(search))
 
+        # Apply ordering
+        query = query.order_by(col(Course.total_enrollees).desc())
+
         # Apply pagination
         query = query.offset(skip).limit(limit)
 
@@ -195,6 +198,12 @@ class UserCourseRepository:
                 query = query.join(Course)
             query = query.where(Course.level == level)
 
+        # Apply ordering
+        query = query.order_by(
+            col(UserCourse.updated_at).desc(), col(UserCourse.created_at).desc()
+        )
+
+        # Apply pagination
         query = query.offset(skip).limit(limit)
 
         result = await self.session.execute(query)

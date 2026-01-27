@@ -345,6 +345,8 @@ async def get_user_courses(
     - Enrollment status
     - Progress information
 
+    **Note:** Most recently updated or enrolled courses appear first.
+
     **Authentication required.**
     """
     try:
@@ -682,6 +684,8 @@ async def get_courses(
 ):
     """
     Get all courses with pagination and optional filters.
+
+    Courses are ordered by total enrollees (highest first).
 
     **Query Parameters:**
     - `page`: Page number (default: 1)
