@@ -2,8 +2,8 @@
 
 from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
-from app.features.courses.models import Course, UserCourse
+from sqlmodel import select, col
+from app.features.courses.models import Course, UserCourse, Category, SubCategory
 
 
 class CourseRepository:
@@ -94,6 +94,7 @@ class CourseRepository:
         category_id: Optional[int] = None,
         sub_category_id: Optional[int] = None,
         min_enrollees: Optional[int] = None,
+        search: Optional[str] = None,
     ) -> List[Course]:
         """Get all courses with pagination and optional filters."""
         from sqlalchemy.orm import selectinload
@@ -117,6 +118,9 @@ class CourseRepository:
 
         if sub_category_id is not None:
             query = query.where(Course.sub_category_id == sub_category_id)
+
+        if search:
+            query = query.where(col(Course.title).contains(search))
 
         # Apply pagination
         query = query.offset(skip).limit(limit)
@@ -162,21 +166,37 @@ class UserCourseRepository:
         return list(result.scalars().all())
 
     async def get_by_user_with_course(
-        self, user_id: int, skip: int = 0, limit: int = 100
+        self,
+        user_id: int,
+        skip: int = 0,
+        limit: int = 100,
+        search: Optional[str] = None,
+        level: Optional[str] = None,
     ) -> List[UserCourse]:
         """Get all user courses with course details eagerly loaded."""
         from sqlalchemy.orm import selectinload
 
-        result = await self.session.execute(
+        query = (
             select(UserCourse)
             .where(UserCourse.user_id == user_id)
             .options(
                 selectinload(UserCourse.course).selectinload(Course.category),  # type: ignore
                 selectinload(UserCourse.course).selectinload(Course.sub_category),  # type: ignore
             )
-            .offset(skip)
-            .limit(limit)
         )
+
+        if search:
+            query = query.join(Course).where(col(Course.title).contains(search))
+
+        if level:
+            # If not already joined by search
+            if not search:
+                query = query.join(Course)
+            query = query.where(Course.level == level)
+
+        query = query.offset(skip).limit(limit)
+
+        result = await self.session.execute(query)
         return list(result.scalars().all())
 
     async def get_by_id_with_course(self, user_course_id: int) -> Optional[UserCourse]:

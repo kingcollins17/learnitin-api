@@ -66,3 +66,36 @@ async def get_current_active_user(
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
+
+
+async def get_current_user_optional(
+    token: Optional[str] = Depends(
+        OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
+    ),
+    session: AsyncSession = Depends(get_async_session),
+) -> Optional[User]:
+    """Get the current authenticated user if token is provided, otherwise return None."""
+    if not token:
+        return None
+    try:
+        payload = decode_access_token(token)
+        if payload is None:
+            return None
+
+        user_id: Optional[str] = payload.get("sub")
+        if user_id is None:
+            return None
+
+        result = await session.execute(select(User).where(User.id == int(user_id)))
+        return result.scalar_one_or_none()
+    except Exception:
+        return None
+
+
+async def get_current_active_user_optional(
+    current_user: Optional[User] = Depends(get_current_user_optional),
+) -> Optional[User]:
+    """Get the current active user if authenticated, otherwise return None."""
+    if current_user and not current_user.is_active:
+        return None
+    return current_user

@@ -5,7 +5,7 @@ from typing import List
 import traceback
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.database.session import get_async_session
-from app.common.deps import get_current_active_user
+from app.common.deps import get_current_active_user, get_current_active_user_optional
 from app.common.responses import ApiResponse, success_response
 from app.features.users.models import User
 from app.features.subscriptions.dependencies import (
@@ -35,7 +35,7 @@ from app.features.courses.schemas import (
     SubCategoryUpdate,
     CoursePublishRequest,
 )
-from app.features.courses.models import UserCourse
+from app.features.courses.models import UserCourse, CourseLevel
 from app.features.courses.service import (
     CourseService,
     CategoryService,
@@ -332,6 +332,8 @@ async def enroll_course(
 async def get_user_courses(
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     per_page: int = Query(10, ge=1, le=100, description="Items per page"),
+    search: str | None = Query(None, description="Search for a course by title"),
+    level: CourseLevel | None = Query(None, description="Filter by course level"),
     session: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -352,6 +354,8 @@ async def get_user_courses(
             user_id=current_user.id,
             page=page,
             per_page=per_page,
+            search=search,
+            level=level,
         )
 
         # Convert SQLModel objects to Pydantic schemas
@@ -670,9 +674,10 @@ async def get_courses(
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     per_page: int = Query(10, ge=1, le=100, description="Items per page"),
     is_public: bool | None = Query(None, description="Filter by public/private"),
-    level: str | None = Query(None, description="Filter by course level"),
+    level: CourseLevel | None = Query(None, description="Filter by course level"),
     category_id: int | None = Query(None, description="Filter by category ID"),
     min_enrollees: int | None = Query(None, ge=0, description="Minimum enrollees"),
+    search: str | None = Query(None, description="Search for a course by title"),
     session: AsyncSession = Depends(get_async_session),
 ):
     """
@@ -696,6 +701,7 @@ async def get_courses(
             level=level,
             category_id=category_id,
             min_enrollees=min_enrollees,
+            search=search,
         )
 
         # Convert SQLModel objects to Pydantic schemas
@@ -725,6 +731,7 @@ async def get_course_detail(
     course_id: int,
     background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_async_session),
+    current_user: User | None = Depends(get_current_active_user_optional),
 ):
     """
     Get course detail with all modules and lessons.
@@ -745,6 +752,14 @@ async def get_course_detail(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Course not found",
             )
+
+        # Access check: if private, only creator can access
+        if not course.is_public:
+            if not current_user or current_user.id != course.user_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Course cannot be accessed",
+                )
 
         # Generate image in background if it's missing
         if not course.image_url:

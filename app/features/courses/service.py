@@ -216,6 +216,7 @@ class CourseService:
         category_id: Optional[int] = None,
         sub_category_id: Optional[int] = None,
         min_enrollees: Optional[int] = None,
+        search: Optional[str] = None,
     ) -> List[Course]:
         """
         Get all courses with pagination and filters.
@@ -241,6 +242,7 @@ class CourseService:
             category_id=category_id,
             sub_category_id=sub_category_id,
             min_enrollees=min_enrollees,
+            search=search,
         )
 
     async def get_course_detail(self, course_id: int) -> Optional[Course]:
@@ -256,7 +258,12 @@ class CourseService:
         return await self.repository.get_with_modules(course_id)
 
     async def get_user_courses(
-        self, user_id: int, page: int = 1, per_page: int = 10
+        self,
+        user_id: int,
+        page: int = 1,
+        per_page: int = 10,
+        search: Optional[str] = None,
+        level: Optional[str] = None,
     ) -> List[UserCourse]:
         """
         Get all courses enrolled by a user.
@@ -271,7 +278,7 @@ class CourseService:
         """
         skip = (page - 1) * per_page
         return await self.user_course_repository.get_by_user_with_course(
-            user_id=user_id, skip=skip, limit=per_page
+            user_id=user_id, skip=skip, limit=per_page, search=search, level=level
         )
 
     async def get_user_course_detail(
