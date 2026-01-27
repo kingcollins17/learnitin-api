@@ -57,3 +57,52 @@ def pcm_to_mp3_bytes(
         raise RuntimeError(f"FFmpeg error: {err.decode()}")
 
     return mp3_bytes
+
+
+def validate_audio_bytes(audio_bytes: bytes) -> bool:
+    """
+    Validate that the provided bytes are a valid MP3 file.
+    Checks:
+    1. Not empty
+    2. Minimum size (e.g. > 100 bytes)
+    3. FFmpeg can parse/decode the stream without errors.
+
+    Args:
+        audio_bytes: The audio data to validate.
+
+    Returns:
+        True if valid, False otherwise.
+    """
+    if (
+        not audio_bytes or len(audio_bytes) < 100
+    ):  # Minimum threshold for a valid MP3 header + some data
+        return False
+
+    ffmpeg_path = iio.get_ffmpeg_exe()
+
+    try:
+        # Run ffmpeg to decode the input to null, if it fails then the file is likely corrupted
+        # -f null - is the standard way to test decoding without outputting anything
+        process = (
+            ffmpeg.input("pipe:0")
+            .output("-", format="null")
+            .run_async(
+                pipe_stdin=True,
+                pipe_stdout=True,
+                pipe_stderr=True,
+                cmd=ffmpeg_path,
+            )
+        )
+
+        _, err = process.communicate(input=audio_bytes)
+
+        if process.returncode != 0:
+            print(
+                f"Audio validation failed (ffmpeg exit code {process.returncode}): {err.decode()}"
+            )
+            return False
+
+        return True
+    except Exception as e:
+        print(f"Error during audio validation: {e}")
+        return False

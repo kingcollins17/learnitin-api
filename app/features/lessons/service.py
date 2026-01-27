@@ -20,6 +20,7 @@ from app.services.audio_generation_service import audio_generation_service
 from app.services.storage_service import firebase_storage_service
 from app.features.subscriptions.models import Subscription, SubscriptionResourceType
 from app.features.subscriptions.usage_service import SubscriptionUsageService
+from app.services.audio_conversion_service import validate_audio_bytes
 
 
 class LessonService:
@@ -132,10 +133,15 @@ class LessonService:
 
         for part in lecture_parts:
             try:
-                # Generate audio bytes in MP3 format for this part
                 audio_bytes = await audio_generation_service.generate_audio_mp3(
                     text=part.script, sample_rate=24000, bitrate="128k"
                 )
+
+                # Validate audio bytes before uploading
+                if not validate_audio_bytes(audio_bytes):
+                    raise ValueError(
+                        f"Generated audio for part {part.order} ('{part.title}') is invalid, empty or corrupted."
+                    )
 
                 # Upload to Firebase with descriptive folder structure
                 audio_url = firebase_storage_service.upload_audio(
