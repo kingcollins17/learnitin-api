@@ -126,6 +126,13 @@ class UserCourse(SQLModel, table=True):
     # Relationship to Course
     course: Optional["Course"] = Relationship()
 
+    @property
+    def total_modules(self) -> int:
+        """Get the total number of modules in the course."""
+        if self.course and self.course.modules:
+            return len(self.course.modules)
+        return 0
+
     class Config:
         """Pydantic config."""
 

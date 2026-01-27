@@ -182,6 +182,7 @@ class UserCourseRepository:
             .options(
                 selectinload(UserCourse.course).selectinload(Course.category),  # type: ignore
                 selectinload(UserCourse.course).selectinload(Course.sub_category),  # type: ignore
+                selectinload(UserCourse.course).selectinload(Course.modules),  # type: ignore
             )
         )
 
@@ -209,6 +210,7 @@ class UserCourseRepository:
             .options(
                 selectinload(UserCourse.course).selectinload(Course.category),  # type: ignore
                 selectinload(UserCourse.course).selectinload(Course.sub_category),  # type: ignore
+                selectinload(UserCourse.course).selectinload(Course.modules),  # type: ignore
             )
         )
         return result.scalar_one_or_none()
@@ -226,6 +228,7 @@ class UserCourseRepository:
             .options(
                 selectinload(UserCourse.course).selectinload(Course.category),  # type: ignore
                 selectinload(UserCourse.course).selectinload(Course.sub_category),  # type: ignore
+                selectinload(UserCourse.course).selectinload(Course.modules),  # type: ignore
             )
         )
         return result.scalar_one_or_none()

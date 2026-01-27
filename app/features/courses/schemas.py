@@ -230,6 +230,7 @@ class UserCourseResponse(BaseModel):
     user_id: int
     status: ProgressStatus
     completed_modules: int
+    total_modules: int
     current_module_id: Optional[int] = None
     current_lesson_id: Optional[int] = None
     course: CourseResponse
