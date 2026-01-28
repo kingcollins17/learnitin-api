@@ -40,11 +40,10 @@ from app.features.lessons.schemas import (
     StartLessonResponse,
 )
 from app.features.lessons.service import LessonService, UserLessonService
-from app.features.lessons.repository import LessonAudioRepository
 from app.features.lessons.lecture_service import lecture_conversion_service
 from app.services.audio_generation_service import audio_generation_service
 from app.services.storage_service import firebase_storage_service
-from app.features.courses.repository import CourseRepository, UserCourseRepository
+from app.features.courses.repository import CourseRepository
 from app.features.modules.repository import ModuleRepository
 from app.features.lessons.generation_service import lesson_generation_service
 from app.features.lessons.tasks import (
@@ -124,14 +123,17 @@ async def get_lessons(
 @router.get("/{lesson_id}", response_model=ApiResponse[LessonDetailResponse])
 async def get_lesson(
     lesson_id: int,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Get a specific lesson by ID.
 
-    **No authentication required** for public courses.
+    **Authentication required.**
     """
     try:
+        assert current_user.id
         service = LessonService(session)
         lesson = await service.get_lesson_by_id(lesson_id)
 
@@ -141,9 +143,40 @@ async def get_lesson(
                 detail="Lesson not found",
             )
 
+        # Check if lesson is unlocked for the user
+        user_lesson_service = UserLessonService(session)
+        user_lesson = await user_lesson_service.get_by_user_and_lesson(
+            user_id=current_user.id, lesson_id=lesson_id
+        )
+
+        if not user_lesson or not user_lesson.is_lesson_unlocked:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This lesson is locked. You need to start the lesson first.",
+            )
+
+        message = "Lesson retrieved successfully"
+
+        # Trigger background generation if content is missing
+        if not lesson.content:
+            if content_tracker.start_tracking(lesson_id, current_user.id):
+                background_tasks.add_task(
+                    generate_lesson_content_background,
+                    lesson_id=lesson_id,
+                    session=session,
+                    user_id=current_user.id,
+                    course_id=lesson.course_id,
+                    module_id=lesson.module_id,
+                )
+                message = "Lesson content is being prepared. Please check back shortly."
+            else:
+                message = (
+                    "Lesson content is already being prepared. Please wait a moment."
+                )
+
         return success_response(
             data=lesson,
-            details="Lesson retrieved successfully",
+            details=message,
         )
     except HTTPException:
         raise
@@ -220,18 +253,16 @@ async def start_lesson(
             )
 
         # Check if user is enrolled in the course
-        user_course_repo = UserCourseRepository(session)
-        user_course = await user_course_repo.get_by_user_and_course(
+        user_lesson_service = UserLessonService(session)
+        is_enrolled = await user_lesson_service.is_user_enrolled(
             user_id=current_user.id, course_id=lesson.course_id
         )
 
-        if not user_course:
+        if not is_enrolled:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You must be enrolled in the course to start a lesson",
             )
-
-        user_lesson_service = UserLessonService(session)
 
         # 2. Start the lesson (create record)
         user_lesson = await user_lesson_service.start_lesson(
@@ -242,6 +273,7 @@ async def start_lesson(
             usage_service=usage_service,
             subscription=subscription,
         )
+        await session.commit()
 
         # 3. Check and handle content availability
         is_content_available = True
@@ -476,7 +508,6 @@ async def unlock_audio(
         assert current_user.id
         lesson_service = LessonService(session)
         service = UserLessonService(session)
-        audio_repo = LessonAudioRepository(session)
 
         # 1. Get the lesson
         lesson = await lesson_service.get_lesson_by_id(lesson_id)
@@ -496,7 +527,7 @@ async def unlock_audio(
         await session.commit()
 
         # 3. Check for existing audio parts
-        existing_audios = await audio_repo.get_by_lesson_id(lesson_id)
+        existing_audios = await lesson_service.get_audios_by_lesson_id(lesson_id)
         message = "Audio unlocked successfully"
 
         if not existing_audios:

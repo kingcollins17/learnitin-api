@@ -249,6 +249,10 @@ class LessonService:
         """
         return await self.repository.get_by_id(lesson_id)
 
+    async def get_audios_by_lesson_id(self, lesson_id: int) -> List[LessonAudio]:
+        """Get all audios for a lesson."""
+        return await self.audio_repo.get_by_lesson_id(lesson_id)
+
     async def create_lesson(self, lesson_data: dict) -> Lesson:
         """
         Create a new lesson.
@@ -428,6 +432,19 @@ class UserLessonService:
             )
 
         return created_user_lesson
+
+    async def get_by_user_and_lesson(
+        self, user_id: int, lesson_id: int
+    ) -> Optional[UserLesson]:
+        """Get user lesson record without raising exception."""
+        return await self.repository.get_by_user_and_lesson(user_id, lesson_id)
+
+    async def is_user_enrolled(self, user_id: int, course_id: int) -> bool:
+        """Check if user is enrolled in a course."""
+        user_course = await self.user_course_repo.get_by_user_and_course(
+            user_id, course_id
+        )
+        return user_course is not None
 
     async def get_user_lessons_by_module(
         self, user_id: int, module_id: int

@@ -167,6 +167,14 @@ class UserModuleService:
                 )
                 if user_course:
                     user_course.completed_modules += 1
+
+                    # Check if all modules in course are completed
+                    all_course_modules = await self.module_repo.get_by_course_id(
+                        user_module.course_id
+                    )
+                    if user_course.completed_modules >= len(all_course_modules):
+                        user_course.status = ProgressStatus.COMPLETED
+
                     user_course.updated_at = datetime.now(timezone.utc)
                     await self.user_course_repo.update(user_course)
             return True
