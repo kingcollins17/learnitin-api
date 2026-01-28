@@ -14,6 +14,13 @@ from app.common.events import (
 
 
 from app.features.lessons.lesson_audio_tracker import audio_tracker
+from app.features.lessons.lesson_content_tracker import content_tracker
+from app.features.notifications.service import NotificationService
+from app.features.notifications.schemas import NotificationCreate
+from app.features.notifications.models import NotificationType
+from app.features.courses.repository import CourseRepository
+from app.features.modules.repository import ModuleRepository
+from app.features.lessons.generation_service import lesson_generation_service
 
 
 async def generate_audio_background(
@@ -114,3 +121,76 @@ async def generate_audio_background(
     finally:
         # Stop tracking so new generation can be requested if needed
         audio_tracker.stop_tracking(lesson_id)
+
+
+async def generate_lesson_content_background(
+    lesson_id: int,
+    session: AsyncSession,
+    user_id: int,
+    course_id: int,
+    module_id: int,
+):
+    """
+    Background task to generate lesson content.
+    """
+    try:
+        lesson_service = LessonService(session)
+        notification_service = NotificationService(session)
+
+        # 1. Get the lesson
+        lesson = await lesson_service.get_lesson_by_id(lesson_id)
+        if not lesson:
+            print(f"Lesson {lesson_id} not found during background content generation.")
+            return
+
+        # Check if content already exists
+        if lesson.content:
+            print(f"Content already exists for lesson {lesson_id}.")
+            return
+
+        # Fetch course and module details for context
+        course_repo = CourseRepository(session)
+        module_repo = ModuleRepository(session)
+
+        course = await course_repo.get_by_id(course_id)
+        module = await module_repo.get_by_id(module_id)
+
+        if not course or not module:
+            print(f"Course or Module not found for lesson {lesson_id}.")
+            return
+
+        print(f"Generating content for lesson {lesson_id}...")
+        generated_content = await lesson_generation_service.generate_lesson_content(
+            course=course,
+            module=module,
+            lesson=lesson,
+        )
+
+        # Update lesson with generated content
+        await lesson_service.update_lesson(
+            lesson_id=lesson_id,
+            lesson_update={"content": generated_content},
+        )
+        await session.commit()
+        print(f"Content generated and saved for lesson {lesson_id}")
+
+        # Dispatch in-app notification
+        await notification_service.create_notification(
+            notification_data=NotificationCreate(
+                user_id=user_id,
+                title="Lesson Ready",
+                message=f"The content for '{lesson.title}' is now ready.",
+                type=NotificationType.INFO,
+                data={
+                    "lesson_id": lesson_id,
+                    "in_app_event": InAppEventType.LESSON_READY,
+                },
+            )
+        )
+
+    except Exception as e:
+        traceback.print_exc()
+        print(f"Failed to generate content for lesson {lesson_id}: {str(e)}")
+    finally:
+        # Stop tracking
+        content_tracker.stop_tracking(lesson_id)

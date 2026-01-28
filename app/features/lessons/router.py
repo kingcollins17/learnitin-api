@@ -37,6 +37,7 @@ from app.features.lessons.schemas import (
     UserLessonUpdate,
     PaginatedUserLessonsResponse,
     LessonAudioResponse,
+    StartLessonResponse,
 )
 from app.features.lessons.service import LessonService, UserLessonService
 from app.features.lessons.repository import LessonAudioRepository
@@ -46,8 +47,12 @@ from app.services.storage_service import firebase_storage_service
 from app.features.courses.repository import CourseRepository, UserCourseRepository
 from app.features.modules.repository import ModuleRepository
 from app.features.lessons.generation_service import lesson_generation_service
-from app.features.lessons.tasks import generate_audio_background
+from app.features.lessons.tasks import (
+    generate_audio_background,
+    generate_lesson_content_background,
+)
 from app.features.lessons.lesson_audio_tracker import audio_tracker
+from app.features.lessons.lesson_content_tracker import content_tracker
 
 router = APIRouter()
 
@@ -186,9 +191,10 @@ async def update_lesson(
 # UserLesson Endpoints
 
 
-@router.post("/{lesson_id}/start", response_model=ApiResponse[UserLessonResponse])
+@router.post("/{lesson_id}/start", response_model=ApiResponse[StartLessonResponse])
 async def start_lesson(
     lesson_id: int,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user),
     _access: None = Depends(ResourceAccessControl(SubscriptionResourceType.LESSON)),
@@ -237,17 +243,36 @@ async def start_lesson(
             subscription=subscription,
         )
 
-        # 3. Check and generate content if missing
-        await check_and_generate_lesson_content(
-            session=session,
-            lesson_id=lesson_id,
-            module_id=lesson.module_id,
-            course_id=lesson.course_id,
+        # 3. Check and handle content availability
+        is_content_available = True
+        message = "Lesson started successfully"
+
+        if not lesson.content:
+            is_content_available = False
+            # Trigger background generation if not already in progress
+            if content_tracker.start_tracking(lesson_id, current_user.id):
+                background_tasks.add_task(
+                    generate_lesson_content_background,
+                    lesson_id=lesson_id,
+                    session=session,
+                    user_id=current_user.id,
+                    course_id=lesson.course_id,
+                    module_id=lesson.module_id,
+                )
+                message = "Lesson content is being prepared. You will be notified when it's ready."
+            else:
+                message = (
+                    "Lesson content is already being prepared. Please wait a moment."
+                )
+
+        response_data = StartLessonResponse(
+            user_lesson=UserLessonResponse.model_validate(user_lesson),
+            is_content_available=is_content_available,
         )
 
         return success_response(
-            data=user_lesson,
-            details="Lesson started successfully",
+            data=response_data,
+            details=message,
         )
     except HTTPException:
         raise
@@ -257,43 +282,6 @@ async def start_lesson(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to start lesson: {str(e)}",
         )
-
-
-async def check_and_generate_lesson_content(
-    session: AsyncSession,
-    lesson_id: int,
-    module_id: int,
-    course_id: int,
-):
-    """
-    Check if lesson content is missing and generate it if needed.
-    """
-    lesson_service = LessonService(session)
-    lesson = await lesson_service.get_lesson_by_id(lesson_id)
-
-    if lesson and not lesson.content:
-        # Fetch course and module details for context
-        course_repo = CourseRepository(session)
-        module_repo = ModuleRepository(session)
-
-        course = await course_repo.get_by_id(course_id)
-        module = await module_repo.get_by_id(module_id)
-
-        if course and module:
-            # Generate content
-            print(f"Generating content for lesson {lesson_id}...")
-            generated_content = await lesson_generation_service.generate_lesson_content(
-                course=course,
-                module=module,
-                lesson=lesson,
-            )
-
-            # Update lesson with generated content
-            await lesson_service.update_lesson(
-                lesson_id=lesson_id,
-                lesson_update={"content": generated_content},
-            )
-            print(f"Content generated and saved for lesson {lesson_id}")
 
 
 @router.get("/user/lessons", response_model=ApiResponse[PaginatedUserLessonsResponse])

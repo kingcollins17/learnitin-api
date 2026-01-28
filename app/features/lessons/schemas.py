@@ -170,3 +170,10 @@ class PaginatedUserLessonsResponse(BaseModel):
     page: int
     per_page: int
     total: int
+
+
+class StartLessonResponse(BaseModel):
+    """Response schema for starting a lesson."""
+
+    user_lesson: UserLessonResponse
+    is_content_available: bool

@@ -12,6 +12,7 @@ class InAppEventType(str, Enum):
     AUDIO_GENERATION_FAILED = "audio_generation_failed"
     COURSE_ENROLLED = "course_enrolled"
     LESSON_COMPLETED = "lesson_completed"
+    LESSON_READY = "lesson_ready"
     SUBSCRIPTION_PURCHASED = "subscription_purchased"
 
 
