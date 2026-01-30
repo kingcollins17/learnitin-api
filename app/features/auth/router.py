@@ -168,11 +168,11 @@ async def request_otp(
     """
     Request a new OTP.
 
-    Generates and sends a 6-digit verification code to the provided email or phone number.
+    Generates and sends a 6-digit verification code to the provided email.
     OTP is valid for 10 minutes.
     """
     try:
-        await service.request_otp(email=data.email, phone_number=data.phone_number)
+        await service.request_otp(email=data.email)
         return success_response(
             data=OTPResponse(message="OTP sent successfully", success=True),
             details="OTP sent successfully",
@@ -198,9 +198,7 @@ async def verify_otp(
     Checks if the provided code is valid and hasn't expired.
     """
     try:
-        is_valid = await service.verify_otp(
-            code=data.code, email=data.email, phone_number=data.phone_number
-        )
+        is_valid = await service.verify_otp(code=data.code, email=data.email)
 
         if not is_valid:
             raise HTTPException(
