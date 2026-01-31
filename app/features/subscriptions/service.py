@@ -12,18 +12,20 @@ from .schemas import SubscriptionVerifyRequest
 from app.common.events import event_bus, NotificationInAppPushEvent, InAppEventType
 
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
 class SubscriptionService:
     """Service for managing subscriptions."""
 
     def __init__(
         self,
-        repository: SubscriptionRepository,
+        session: AsyncSession,
         google_play: GooglePlayService,
-        usage_repository: Optional[SubscriptionUsageRepository] = None,
     ):
-        self.repository = repository
+        self.repository = SubscriptionRepository(session)
+        self.usage_repository = SubscriptionUsageRepository(session)
         self.google_play = google_play
-        self.usage_repository = usage_repository
 
     # ========== Private Helpers (DRY) ==========
 

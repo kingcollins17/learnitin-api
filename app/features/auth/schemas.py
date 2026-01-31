@@ -36,3 +36,24 @@ class GoogleLoginRequest(BaseModel):
     """Google login request schema."""
 
     token: str
+
+
+class TestEmailRequest(BaseModel):
+    """Schema for test email request."""
+
+    email: str
+
+
+class MagicLinkLoginRequest(BaseModel):
+    """Schema for magic link login request."""
+
+    email: str
+    otp: str
+
+
+class ResetPasswordRequest(BaseModel):
+    """Schema for resetting password with OTP."""
+
+    email: str
+    otp: str
+    new_password: str

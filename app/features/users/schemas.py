@@ -16,7 +16,7 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     """Schema for creating a new user."""
 
-    password: str
+    password: Optional[str] = None
 
 
 class UserUpdate(BaseModel):
@@ -52,6 +52,7 @@ User = UserResponse
 class UserVerifyRequest(BaseModel):
     """Schema for verifying a user with OTP code."""
 
+    email: EmailStr
     code: str
 
 

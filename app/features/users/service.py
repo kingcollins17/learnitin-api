@@ -32,12 +32,15 @@ class UserService:
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Username already taken"
             )
 
-        # Create user with hashed password
+        # Create user with hashed password if provided
+        hashed_password = (
+            get_password_hash(user_data.password) if user_data.password else None
+        )
         user = User(
             email=user_data.email,
             username=user_data.username,
             full_name=user_data.full_name,
-            hashed_password=get_password_hash(user_data.password),
+            hashed_password=hashed_password,
         )
 
         return await self.repository.create(user)
@@ -95,7 +98,7 @@ class UserService:
     async def authenticate_user(self, username: str, password: str) -> Optional[User]:
         """Authenticate a user by username and password."""
         user = await self.repository.get_by_email(username)
-        if not user:
+        if not user or not user.hashed_password:
             return None
         if not verify_password(password, user.hashed_password):
             return None

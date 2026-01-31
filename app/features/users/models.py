@@ -14,7 +14,7 @@ class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     email: str = Field(unique=True, index=True, nullable=False)
     username: str = Field(unique=True, index=True, nullable=False)
-    hashed_password: str = Field(nullable=False)
+    hashed_password: Optional[str] = Field(default=None, nullable=True)
     full_name: Optional[str] = Field(default=None)
     is_active: bool = Field(default=False)
     is_superuser: bool = Field(default=False)

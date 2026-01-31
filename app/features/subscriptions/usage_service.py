@@ -6,15 +6,18 @@ from .usage_repository import SubscriptionUsageRepository
 from .service import SubscriptionService
 
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
 class SubscriptionUsageService:
     """Service for managing and tracking subscription usage."""
 
     def __init__(
         self,
-        repository: SubscriptionUsageRepository,
+        session: AsyncSession,
         subscription_service: SubscriptionService,
     ):
-        self.repository = repository
+        self.repository = SubscriptionUsageRepository(session)
         self.subscription_service = subscription_service
 
     async def increment_usage(

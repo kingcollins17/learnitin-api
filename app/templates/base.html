@@ -3,55 +3,116 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}LearnItIn Notification{% endblock %}</title>
+    <title>{% block title %}LearnItIn{% endblock %}</title>
     <style>
+        /* Modern reset and fonts */
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             line-height: 1.6;
-            color: #333;
+            color: #2d3748;
+            margin: 0;
+            padding: 0;
+            background-color: #f7fafc;
+            width: 100% !important;
+        }
+        
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        
+        .main-container {
             max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        .header {
-            background-color: #f8f9fa;
-            padding: 20px;
-            text-align: center;
-            border-radius: 5px 5px 0 0;
-        }
-        .content {
-            padding: 20px;
+            margin: 40px auto;
             background-color: #ffffff;
-            border: 1px solid #dee2e6;
-            border-top: none;
-            border-radius: 0 0 5px 5px;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
         }
-        .footer {
-            margin-top: 20px;
+        
+        .header {
+            background-color: #ffffff;
+            padding: 40px 0 20px 0;
             text-align: center;
-            font-size: 12px;
-            color: #6c757d;
         }
-        .button {
+        
+        .logo {
+            max-height: 54px;
+            width: auto;
             display: inline-block;
-            padding: 10px 20px;
-            background-color: #007bff;
-            color: #ffffff;
+        }
+        
+        .content {
+            padding: 20px 50px 40px 50px;
+        }
+        
+        .footer {
+            background-color: #f8fafc;
+            padding: 30px 50px;
+            text-align: center;
+        }
+        
+        .footer-text {
+            font-size: 13px;
+            color: #718096;
+            margin-bottom: 8px;
+        }
+        
+        .divider {
+            height: 1px;
+            background-color: #edf2f7;
+            margin: 20px 0;
+        }
+        
+        .accent-bar {
+            height: 4px;
+            background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%);
+        }
+        
+        .social-link {
+            color: #22c55e;
             text-decoration: none;
-            border-radius: 5px;
-            margin-top: 20px;
+            font-weight: 600;
+            margin: 0 10px;
+            font-size: 14px;
+        }
+
+        /* Mobile adjustments */
+        @media only screen and (max-width: 600px) {
+            .main-container {
+                margin: 0 !important;
+                border-radius: 0 !important;
+            }
+            .content {
+                padding: 30px 25px !important;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h2>LearnItIn</h2>
-    </div>
-    <div class="content">
-        {% block content %}{% endblock %}
-    </div>
-    <div class="footer">
-        <p>&copy; {{ now().year }} LearnItIn. All rights reserved.</p>
+    <div class="accent-bar"></div>
+    <div class="main-container">
+        <div class="header">
+            <img src="https://drive.google.com/uc?export=view&id=1Fg6pBCL3bAG_r9NmP4WJKZ-1ae6N8iHa" alt="LearnItIn" class="logo">
+        </div>
+        
+        <div class="content">
+            {% block content %}{% endblock %}
+        </div>
+        
+        <div class="footer">
+            <div class="divider"></div>
+            <p class="footer-text">
+                &copy; {{ now().year }} <strong>LearnItIn</strong>. All rights reserved.
+            </p>
+            <p class="footer-text">
+                The future of AI-driven personalized learning.
+            </p>
+            <div style="margin-top: 15px;">
+                <a href="https://learnitin.online" class="social-link">Website</a>
+                <a href="#" class="social-link">Support</a>
+            </div>
+        </div>
     </div>
 </body>
 </html>

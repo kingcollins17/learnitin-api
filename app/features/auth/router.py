@@ -6,19 +6,25 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.database.session import get_async_session
 from app.common.responses import ApiResponse, success_response
-from app.features.auth.schemas import Token, GoogleLoginRequest
+from app.features.auth.otp_service import OTPService
+from app.features.users.schemas import UserCreate, UserResponse
+from app.services.email_service import email_service
+from app.features.auth.schemas import (
+    Token,
+    GoogleLoginRequest,
+    TestEmailRequest,
+    MagicLinkLoginRequest,
+    ResetPasswordRequest,
+)
 from app.features.auth.service import AuthService
 from app.features.auth.otp_repository import OTPRepository
 from app.features.auth.otp_schemas import OTPRequest, OTPResponse, OTPVerify
-from app.features.auth.otp_service import OTPService
-from app.features.users.schemas import UserCreate, UserResponse
 
 router = APIRouter()
 
 
 def get_otp_service(session: AsyncSession = Depends(get_async_session)) -> OTPService:
-    repository = OTPRepository(session)
-    return OTPService(repository)
+    return OTPService(session)
 
 
 @router.post(
@@ -187,6 +193,135 @@ async def request_otp(
         )
 
 
+@router.post("/magic-link/request", response_model=ApiResponse[OTPResponse])
+async def request_magic_link(
+    data: OTPRequest,
+    service: OTPService = Depends(get_otp_service),
+):
+    """
+    Request a passwordless sign-in magic link.
+
+    Generates a magic link and sends it to the provided email.
+    The link leads to the zidepeople.com app which then calls the verify endpoint.
+    """
+    try:
+        await service.request_magic_link(email=data.email)
+        return success_response(
+            data=OTPResponse(message="Magic link sent successfully", success=True),
+            details="Magic link sent successfully",
+        )
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to send magic link: {str(e)}",
+        )
+
+
+@router.post("/password-reset/request", response_model=ApiResponse[OTPResponse])
+async def request_password_reset(
+    data: OTPRequest,
+    service: OTPService = Depends(get_otp_service),
+):
+    """
+    Request a password reset OTP.
+    """
+    try:
+        # Use specialized password reset OTP request
+        await service.request_password_reset_otp(email=data.email)
+        return success_response(
+            data=OTPResponse(message="Password reset OTP sent", success=True),
+            details="OTP sent successfully",
+        )
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to send reset OTP: {str(e)}",
+        )
+
+
+@router.post("/password-reset/reset", response_model=ApiResponse[bool])
+async def reset_password(
+    data: ResetPasswordRequest,
+    session: AsyncSession = Depends(get_async_session),
+    otp_service: OTPService = Depends(get_otp_service),
+):
+    """
+    Reset password using email, OTP and new password.
+    """
+    try:
+        # 1. Verify OTP
+        is_valid = await otp_service.verify_otp(code=data.otp, email=data.email)
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired OTP",
+            )
+
+        # 2. Reset Password
+        auth_service = AuthService(session)
+        await auth_service.reset_password(data.email, data.new_password)
+
+        await session.commit()
+
+        return success_response(
+            data=True,
+            details="Password has been reset successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Password reset failed: {str(e)}",
+        )
+
+
+@router.post("/passwordless/verify", response_model=Token)
+async def verify_magic_link(
+    data: MagicLinkLoginRequest,
+    session: AsyncSession = Depends(get_async_session),
+    otp_service: OTPService = Depends(get_otp_service),
+):
+    """
+    Verify magic link OTP and login.
+
+    Takes the email and OTP from the magic link, verifies them,
+    and returns a standard access token for the user.
+    """
+    try:
+        # 1. Verify OTP
+        is_valid = await otp_service.verify_otp(code=data.otp, email=data.email)
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired magic link",
+            )
+
+        # 2. Authenticate and get token
+        auth_service = AuthService(session)
+        user = await auth_service.authenticate_magic_link(data.email)
+
+        # 3. Activation check (if we want to auto-activate magic link users)
+        if not user.is_active:
+            user.is_active = True
+            await auth_service.user_service.repository.update(user)
+            await session.commit()
+
+        return auth_service.generate_token_response(user)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Magic link verification failed: {str(e)}",
+        )
+
+
 @router.post("/otp/verify", response_model=ApiResponse[OTPResponse])
 async def verify_otp(
     data: OTPVerify,
@@ -214,4 +349,73 @@ async def verify_otp(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"OTP verification failed: {str(e)}",
+        )
+
+
+@router.post("/otp/check", response_model=ApiResponse[bool])
+async def check_otp(
+    data: OTPVerify,
+    service: OTPService = Depends(get_otp_service),
+):
+    """
+    Check if an OTP code is valid without marking it as used.
+    """
+    try:
+        is_valid = await service.check_otp_validity(code=data.code, email=data.email)
+
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired OTP"
+            )
+
+        return success_response(
+            data=True,
+            details="OTP is valid",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"OTP check failed: {str(e)}",
+        )
+
+
+@router.post("/test-email", response_model=ApiResponse[OTPResponse])
+async def test_email(
+    data: TestEmailRequest,
+):
+    """
+    Test email sending.
+
+    Sends a test email to the provided address using the OTP template.
+    """
+    try:
+        email_sent = email_service.send_email(
+            to_email=data.email,
+            subject="Test Email - LearnItIn API",
+            template_name="otp_verification.html",
+            context={
+                "code": "123456",
+                "user_email": data.email,
+                "duration_minutes": 10,
+            },
+        )
+
+        if not email_sent:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to send test email",
+            )
+
+        return success_response(
+            data=OTPResponse(message="Test email sent successfully", success=True),
+            details="Test email sent successfully",
+        )
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Test email failed: {str(e)}",
         )

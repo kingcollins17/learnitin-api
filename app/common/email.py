@@ -29,6 +29,9 @@ def get_jinja_env() -> Environment:
     from datetime import datetime
 
     env.globals["now"] = datetime.now
+    from app.common.config import settings
+
+    env.globals["app_logo"] = settings.APP_LOGO
 
     return env
 

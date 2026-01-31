@@ -39,8 +39,11 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = Field(default="")
 
     # Email
-    EMAIL_FROM: str = Field(default="noreply@learnitin.com")
+    EMAIL_FROM: str = Field(default="noreply@learnitin.online")
     RESEND_API_KEY: str = Field(default="")
+    APP_LOGO: str = Field(
+        default="https://drive.google.com/uc?export=view&id=1Fg6pBCL3bAG_r9NmP4WJKZ-1ae6N8iHa"
+    )
 
     # Firebase
     FIREBASE_STORAGE_BUCKET: str = Field(default="")

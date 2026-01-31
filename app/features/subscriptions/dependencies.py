@@ -18,11 +18,10 @@ from .google_play_service import GooglePlayService
 async def get_subscription_service(
     session: AsyncSession = Depends(get_async_session),
 ) -> SubscriptionService:
-    """Dependency to provide SubscriptionService with all repositories."""
+    """Dependency to provide SubscriptionService."""
     return SubscriptionService(
-        repository=SubscriptionRepository(session),
+        session=session,
         google_play=GooglePlayService(),
-        usage_repository=SubscriptionUsageRepository(session),
     )
 
 
@@ -32,7 +31,7 @@ async def get_subscription_usage_service(
 ) -> SubscriptionUsageService:
     """Dependency to provide SubscriptionUsageService."""
     return SubscriptionUsageService(
-        repository=SubscriptionUsageRepository(session),
+        session=session,
         subscription_service=sub_service,
     )
 

@@ -160,46 +160,43 @@ async def list_users(
 async def verify_user(
     data: UserVerifyRequest,
     session: AsyncSession = Depends(get_async_session),
-    current_user: UserModel = Depends(get_current_user),
 ):
     """
-    Verify the current user's account using an OTP code.
+    Verify a user's account using an OTP code.
 
-    **Authentication required** - Users can only verify their own account.
-    The user must be signed in (but can be inactive) to use this endpoint.
+    **Unauthenticated** - Anyone with a valid email and OTP can verify an account.
 
     This endpoint:
     1. Validates the OTP code exists in the database
-    2. Ensures the OTP is associated with the current user's email
+    2. Ensures the OTP is associated with the provided email
     3. Activates the user's account (sets is_active=True)
     4. Marks the OTP as used
 
     **Request Body:**
+    - `email`: User's email address
     - `code`: The OTP code received via email
 
     **Response:**
     Returns the updated user with `is_active=True`
 
     **Error Responses:**
-    - `400 Bad Request`: Invalid OTP code or OTP doesn't match user's email
+    - `400 Bad Request`: Invalid OTP code or OTP doesn't match email
     - `400 Bad Request`: User is already active
-    - `401 Unauthorized`: Not authenticated
-    - `403 Forbidden`: OTP doesn't belong to the user
+    - `404 Not Found`: User not found
     - `500 Internal Server Error`: Server error
     """
     try:
         # Initialize services
-        otp_repository = OTPRepository(session)
-        otp_service = OTPService(otp_repository)
+        otp_service = OTPService(session)
         user_service = UserService(session)
 
-        # Verify OTP belongs to the current user and mark as used
+        # Verify OTP belongs to the user and mark as used
         await otp_service.verify_and_validate_otp_for_user(
-            code=data.code, user_email=current_user.email
+            code=data.code, user_email=data.email
         )
 
         # Activate the user
-        user = await user_service.activate_user(current_user.email)
+        user = await user_service.activate_user(data.email)
 
         # Commit the transaction
         await session.commit()

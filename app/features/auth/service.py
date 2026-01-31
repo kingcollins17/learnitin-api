@@ -60,19 +60,7 @@ class AuthService:
         # Allow login even if user is not active
         # Client should check is_active and prompt for verification if needed
 
-        access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-        access_token = create_access_token(
-            data={"sub": str(user.id)}, expires_delta=access_token_expires
-        )
-
-        return {
-            "access_token": access_token,
-            "token_type": "bearer",
-            "user_id": user.id,
-            "email": user.email,
-            "username": user.username,
-            "is_active": user.is_active,
-        }
+        return self.generate_token_response(user)
 
     async def authenticate_google_user(self, token: str) -> dict:
         """
@@ -121,16 +109,10 @@ class AuthService:
                         await self.user_service.repository.get_by_username(username)
                     )
 
-                # Generate random password
-                password_chars = (
-                    string.ascii_letters + string.digits + string.punctuation
-                )
-                password = "".join(secrets.choice(password_chars) for _ in range(16))
-
                 user_data = UserCreate(
                     email=email,
                     username=username,
-                    password=password,
+                    password=None,
                     full_name=idinfo.get("name"),
                 )
 
@@ -140,22 +122,7 @@ class AuthService:
                 user.is_active = True
                 await self.user_service.repository.update(user)
 
-            # Generate JWT
-            access_token_expires = timedelta(
-                minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-            )
-            access_token = create_access_token(
-                data={"sub": str(user.id)}, expires_delta=access_token_expires
-            )
-
-            return {
-                "access_token": access_token,
-                "token_type": "bearer",
-                "user_id": user.id,
-                "email": user.email,
-                "username": user.username,
-                "is_active": user.is_active,
-            }
+            return self.generate_token_response(user)
 
         except ValueError as e:
             raise HTTPException(
@@ -167,3 +134,59 @@ class AuthService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Google authentication failed: {str(e)}",
             )
+
+    async def authenticate_magic_link(self, email: str) -> User:
+        """
+        Authenticate a user via magic link (email already verified by OTP).
+
+        Returns:
+            The authenticated User object
+        """
+        user = await self.user_service.repository.get_by_email(email)
+
+        if not user:
+            # Optionally create user if they don't exist?
+            # Usually magic link is for existing users, but we can support registration too.
+            # For now, let's assume registration happens first or via Google.
+            # If we want to support registration via magic link, we'd do it here.
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
+            )
+
+        return user
+
+    def generate_token_response(self, user: User) -> dict:
+        """Generate a standard token response for a user."""
+        access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": str(user.id)}, expires_delta=access_token_expires
+        )
+
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user_id": user.id,
+            "email": user.email,
+            "username": user.username,
+            "is_active": user.is_active,
+        }
+
+    async def reset_password(self, email: str, new_password: str) -> bool:
+        """Reset a user's password."""
+        user = await self.user_service.repository.get_by_email(email)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
+            )
+
+        from app.common.security import get_password_hash
+
+        user.hashed_password = get_password_hash(new_password)
+
+        # If user was inactive, we can consider them activated now since they verified via OTP
+        user.is_active = True
+
+        await self.user_service.repository.update(user)
+        return True
