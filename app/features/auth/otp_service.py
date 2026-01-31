@@ -2,7 +2,7 @@ import secrets
 import string
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Literal
 
 from app.features.auth.otp_models import OTP
 from app.features.auth.otp_repository import OTPRepository
@@ -98,7 +98,11 @@ class OTPService:
 
         return created_otp
 
-    async def request_magic_link(self, email: str) -> OTP:
+    async def request_magic_link(
+        self,
+        email: str,
+        request_type: Literal["sign_in", "verification"] = "sign_in",
+    ) -> OTP:
         """Generate and send an OTP via a Magic Link email."""
         # Delete any existing unused OTPs for this recipient
         await self.otp_repository.delete_unused_otps(email=email)
@@ -118,16 +122,27 @@ class OTPService:
 
         # Send email
         try:
-            magic_link = f"https://www.learnitin.online/app/passwordless-signin?email={email}&otp={code}"
+            # Different base URL or path could be used based on request_type if needed
+            if request_type == "verification":
+                path = "verify-account"
+                subject = "Verify Your LearnItIn Account"
+            else:
+                path = "passwordless-signin"
+                subject = "Sign in to LearnItIn"
+
+            magic_link = (
+                f"https://www.learnitin.online/app/{path}?email={email}&otp={code}"
+            )
 
             email_sent = email_service.send_email(
                 to_email=email,
-                subject="Sign in to LearnItIn",
+                subject=subject,
                 template_name="magic_link.html",
                 context={
                     "magic_link": magic_link,
                     "user_email": email,
                     "duration_minutes": 15,
+                    "request_type": request_type,
                 },
             )
             if not email_sent:

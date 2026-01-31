@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Literal
 from pydantic import BaseModel, EmailStr
 
 
@@ -20,3 +20,10 @@ class OTPResponse(BaseModel):
 
     message: str
     success: bool
+
+
+class MagicLinkRequest(BaseModel):
+    """Request schema for magic link generation."""
+
+    email: EmailStr
+    type: Literal["sign_in", "verification"] = "sign_in"

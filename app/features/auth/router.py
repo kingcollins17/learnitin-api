@@ -18,7 +18,12 @@ from app.features.auth.schemas import (
 )
 from app.features.auth.service import AuthService
 from app.features.auth.otp_repository import OTPRepository
-from app.features.auth.otp_schemas import OTPRequest, OTPResponse, OTPVerify
+from app.features.auth.otp_schemas import (
+    OTPRequest,
+    OTPResponse,
+    OTPVerify,
+    MagicLinkRequest,
+)
 
 router = APIRouter()
 
@@ -195,7 +200,7 @@ async def request_otp(
 
 @router.post("/magic-link/request", response_model=ApiResponse[OTPResponse])
 async def request_magic_link(
-    data: OTPRequest,
+    data: MagicLinkRequest,
     service: OTPService = Depends(get_otp_service),
 ):
     """
@@ -205,7 +210,7 @@ async def request_magic_link(
     The link leads to the zidepeople.com app which then calls the verify endpoint.
     """
     try:
-        await service.request_magic_link(email=data.email)
+        await service.request_magic_link(email=data.email, request_type=data.type)
         return success_response(
             data=OTPResponse(message="Magic link sent successfully", success=True),
             details="Magic link sent successfully",
