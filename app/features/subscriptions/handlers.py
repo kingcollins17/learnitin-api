@@ -18,8 +18,6 @@ from .events import (
     SubscriptionGracePeriodEvent,
     SubscriptionRecoveredEvent,
 )
-from .repository import SubscriptionRepository
-from .usage_repository import SubscriptionUsageRepository
 from .google_play_service import GooglePlayService
 from .service import SubscriptionService
 
@@ -29,9 +27,8 @@ logger = logging.getLogger(__name__)
 def _create_service(session) -> SubscriptionService:
     """Create a SubscriptionService with all dependencies."""
     return SubscriptionService(
-        repository=SubscriptionRepository(session),
+        session=session,
         google_play=GooglePlayService(),
-        usage_repository=SubscriptionUsageRepository(session),
     )
 
 

@@ -3,6 +3,7 @@
 import base64
 import json
 import logging
+import traceback
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,7 +31,7 @@ from .usage_service import SubscriptionUsageService
 from .dependencies import (
     get_user_subscription,
     get_subscription_usage_service,
-    get_subscription_service as get_service,
+    get_subscription_service,
 )
 from .schemas import (
     PubSubPayload,
@@ -45,15 +46,6 @@ logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/subscriptions")
-
-
-async def get_subscription_service(
-    session: AsyncSession = Depends(get_async_session),
-) -> SubscriptionService:
-    """Dependency to provide SubscriptionService."""
-    repository = SubscriptionRepository(session)
-    google_play = GooglePlayService()
-    return SubscriptionService(repository, google_play)
 
 
 @router.get("/me", response_model=ApiResponse[SubscriptionResponse])
@@ -102,6 +94,7 @@ async def verify_subscription(
             data=subscription_resp, details="Subscription verified successfully"
         )
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
