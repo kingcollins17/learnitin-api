@@ -22,37 +22,30 @@ class FirebaseStorageService:
     def _initialize_app(self):
         """Initialize Firebase Admin SDK if not already initialized."""
         if not firebase_admin._apps:
-            cred = None
+            options = {"storageBucket": self.bucket_name} if self.bucket_name else {}
+
+            # If explicit credentials provided in settings, use them
             if settings.FIREBASE_CREDENTIALS_JSON:
                 try:
-                    # If it's a path to a file
                     if os.path.exists(settings.FIREBASE_CREDENTIALS_JSON):
                         cred = credentials.Certificate(
                             settings.FIREBASE_CREDENTIALS_JSON
                         )
                     else:
-                        # Try parsing as JSON string
                         cred_info = json.loads(settings.FIREBASE_CREDENTIALS_JSON)
                         cred = credentials.Certificate(cred_info)
+
+                    firebase_admin.initialize_app(cred, options)
+                    return
                 except Exception as e:
-                    print(f"Error loading Firebase credentials: {e}")
+                    print(f"Error loading explicit Firebase credentials: {e}")
 
-            # If no explicit creds, let it try default (e.g. GCLOUD)
-            # or if cred was successfully created
-            if cred:
-                firebase_admin.initialize_app(cred, {"storageBucket": self.bucket_name})
-            else:
-                # Fallback to default or assume already configured
-                # If bucket_name is provided, use it
-                options = {}
-                if self.bucket_name:
-                    options["storageBucket"] = self.bucket_name
-
-                try:
-                    firebase_admin.initialize_app(options=options)
-                except ValueError:
-                    # App might be already initialized differently
-                    pass
+            # Fallback: Initialize with Google Application Default Credentials
+            # This works automatically on Cloud Run or locally if GOOGLE_APPLICATION_CREDENTIALS is set
+            try:
+                firebase_admin.initialize_app(options=options)
+            except Exception as e:
+                print(f"Firebase default initialization fallback: {e}")
 
     def upload_bytes(
         self,

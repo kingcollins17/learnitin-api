@@ -1,1 +1,2 @@
-drop table user_lessons, user_courses, user_modules, lessons, modules, courses, sub_categories, categories;
+URL=https://learnitin-api-982845074244.us-central1.run.app
+https://learnitin-api-982845074244.us-central1.run.app

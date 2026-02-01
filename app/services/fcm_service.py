@@ -22,37 +22,33 @@ class FirebaseFCMService:
     def _initialize_app(self):
         """Initialize Firebase Admin SDK if not already initialized."""
         if not firebase_admin._apps:
-            cred = None
+            options = (
+                {"storageBucket": settings.FIREBASE_STORAGE_BUCKET}
+                if settings.FIREBASE_STORAGE_BUCKET
+                else {}
+            )
+
+            # If explicit credentials provided in settings, use them
             if settings.FIREBASE_CREDENTIALS_JSON:
                 try:
-                    # If it's a path to a file
                     if os.path.exists(settings.FIREBASE_CREDENTIALS_JSON):
                         cred = credentials.Certificate(
                             settings.FIREBASE_CREDENTIALS_JSON
                         )
                     else:
-                        # Try parsing as JSON string
                         cred_info = json.loads(settings.FIREBASE_CREDENTIALS_JSON)
                         cred = credentials.Certificate(cred_info)
+
+                    firebase_admin.initialize_app(cred, options)
+                    return
                 except Exception as e:
-                    logger.error(f"Error loading Firebase credentials: {e}")
+                    logger.error(f"Error loading explicit Firebase credentials: {e}")
 
-            # If no explicit creds, let it try default (e.g. GCLOUD)
-            if cred:
-                firebase_admin.initialize_app(
-                    cred, {"storageBucket": settings.FIREBASE_STORAGE_BUCKET}
-                )
-            else:
-                # Fallback to default or assume already configured
-                options = {}
-                if settings.FIREBASE_STORAGE_BUCKET:
-                    options["storageBucket"] = settings.FIREBASE_STORAGE_BUCKET
-
-                try:
-                    firebase_admin.initialize_app(options=options)
-                except ValueError:
-                    # App might be already initialized differently
-                    pass
+            # Fallback: Initialize with Google Application Default Credentials
+            try:
+                firebase_admin.initialize_app(options=options)
+            except Exception as e:
+                logger.error(f"Firebase default initialization fallback: {e}")
 
     def send_to_token(
         self,
