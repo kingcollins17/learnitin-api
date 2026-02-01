@@ -13,12 +13,14 @@ import secrets
 import string
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
+from app.features.auth.otp_service import OTPService
 
 
 class AuthService:
     """Service for authentication logic."""
 
     def __init__(self, session: AsyncSession):
+        self.session = session
         self.user_service = UserService(session)
 
     async def register_user(self, user_data: UserCreate) -> User:
@@ -57,8 +59,18 @@ class AuthService:
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-        # Allow login even if user is not active
-        # Client should check is_active and prompt for verification if needed
+        if not user.is_active:
+            # Automatically request verification magic link
+
+            otp_service = OTPService(self.session)
+            await otp_service.request_magic_link(
+                email=user.email, request_type="verification"
+            )
+
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account is not active. A verification link has been sent to your email. Please verify your account to login.",
+            )
 
         return self.generate_token_response(user)
 

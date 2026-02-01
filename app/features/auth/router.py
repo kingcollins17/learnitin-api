@@ -65,8 +65,17 @@ async def register(
     try:
         service = AuthService(session)
         user = await service.register_user(user_data)
+
+        # Automatically request verification magic link
+        otp_service = OTPService(session)
+        await otp_service.request_magic_link(
+            email=user.email, request_type="verification"
+        )
+
         return success_response(
-            data=user, details="User registered successfully", status_code=201
+            data=user,
+            details="User registered successfully. Please check your email for a verification link to activate your account.",
+            status_code=201,
         )
     except HTTPException:
         traceback.print_exc()
@@ -302,7 +311,7 @@ async def verify_magic_link(
         if not is_valid:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired magic link",
+                detail="Invalid or expired link",
             )
 
         # 2. Authenticate and get token
@@ -321,9 +330,10 @@ async def verify_magic_link(
         raise
     except Exception as e:
         traceback.print_exc()
+        print(e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Magic link verification failed: {str(e)}",
+            detail=f"link verification failed: we could not verify your link at this time",
         )
 
 
@@ -342,18 +352,19 @@ async def verify_otp(
 
         if not is_valid:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired OTP"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired Link/OTP",
             )
 
         return success_response(
             data=OTPResponse(message="OTP verified successfully", success=True),
-            details="OTP verified successfully",
+            details="Link/OTP verified successfully",
         )
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"OTP verification failed: {str(e)}",
+            detail=f"Verification failed: {str(e)}",
         )
 
 
@@ -370,12 +381,13 @@ async def check_otp(
 
         if not is_valid:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired OTP"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired Link/OTP",
             )
 
         return success_response(
             data=True,
-            details="OTP is valid",
+            details="Link/OTP is valid",
         )
     except HTTPException:
         raise
@@ -384,43 +396,4 @@ async def check_otp(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"OTP check failed: {str(e)}",
-        )
-
-
-@router.post("/test-email", response_model=ApiResponse[OTPResponse])
-async def test_email(
-    data: TestEmailRequest,
-):
-    """
-    Test email sending.
-
-    Sends a test email to the provided address using the OTP template.
-    """
-    try:
-        email_sent = email_service.send_email(
-            to_email=data.email,
-            subject="Test Email - LearnItIn API",
-            template_name="otp_verification.html",
-            context={
-                "code": "123456",
-                "user_email": data.email,
-                "duration_minutes": 10,
-            },
-        )
-
-        if not email_sent:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to send test email",
-            )
-
-        return success_response(
-            data=OTPResponse(message="Test email sent successfully", success=True),
-            details="Test email sent successfully",
-        )
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Test email failed: {str(e)}",
         )

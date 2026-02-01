@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Sign In - LearnItIn{% endblock %}
+{% block title %}Verify Your Account - LearnItIn{% endblock %}
 
 {% block content %}
 <style>
@@ -38,6 +38,30 @@
         transition: transform 0.2s, box-shadow 0.2s;
     }
     
+    .raw-link-container {
+        margin-top: 30px;
+        padding: 15px;
+        background-color: #f0fdf4;
+        border-radius: 8px;
+        border: 1px dashed #22c55e;
+    }
+    
+    .raw-link-label {
+        font-size: 12px;
+        color: #16a34a;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 8px;
+        display: block;
+    }
+    
+    .raw-link-text {
+        font-size: 13px;
+        color: #166534;
+        word-break: break-all;
+        font-family: inherit;
+    }
+    
     .expiry-text {
         font-size: 14px;
         color: #718096;
@@ -56,14 +80,19 @@
     }
 </style>
 
-<div class="welcome-text">Instant Sign In</div>
+<div class="welcome-text">Verify Your Account</div>
 
 <p class="instruction-text">
-    Click the button below to sign in to your <strong>LearnItIn</strong> account instantly. This link will automatically authenticate you.
+    Welcome to <strong>LearnItIn</strong>! Click the button below to verify your email address and activate your account.
 </p>
 
 <div class="button-container">
-    <a href="{{ magic_link }}" class="magic-link-button">Sign In to LearnItIn</a>
+    <a href="{{ magic_link }}" class="magic-link-button">Verify Account</a>
+</div>
+
+<div class="raw-link-container">
+    <span class="raw-link-label">If the button doesn't work, copy and paste this link:</span>
+    <div class="raw-link-text">{{ magic_link }}</div>
 </div>
 
 <p class="expiry-text">
@@ -71,6 +100,6 @@
 </p>
 
 <div class="security-note">
-    <strong>Security Note:</strong> For your security, please do not share this link with anyone. If you didn't request this sign-in link, you can safely ignore this email.
+    <strong>Security Note:</strong> If you did not request this verification, please ignore this email.
 </div>
 {% endblock %}

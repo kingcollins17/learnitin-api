@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     # Database Connection Pool Settings
     DB_POOL_SIZE: int = Field(default=5)
     DB_MAX_OVERFLOW: int = Field(default=10)
+    DB_ECHO: bool = Field(default=False)
 
     # OpenAI / LangChain
     OPENAI_API_KEY: str = Field(default="")

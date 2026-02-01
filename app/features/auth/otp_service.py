@@ -61,7 +61,7 @@ class OTPService:
         return created_otp
 
     async def request_password_reset_otp(self, email: str) -> OTP:
-        """Generate and send an OTP for password reset."""
+        """Generate and send an OTP for password reset via Magic Link."""
         # Delete any existing unused OTPs for this recipient
         await self.otp_repository.delete_unused_otps(email=email)
 
@@ -72,7 +72,7 @@ class OTPService:
         otp = OTP(
             email=email,
             code=code,
-            duration_minutes=10,
+            duration_minutes=15,  # Increased for magic link
             created_at=datetime.now(timezone.utc),
         )
 
@@ -80,21 +80,27 @@ class OTPService:
 
         # Send email
         try:
+            magic_link = f"https://www.learnitin.online/app/reset-password?email={email}&otp={code}"
+
             email_sent = email_service.send_email(
                 to_email=email,
                 subject="Reset Your Password",
-                template_name="password_reset.html",
-                context={"code": code, "user_email": email, "duration_minutes": 10},
+                template_name="magic_link_password_reset.html",
+                context={
+                    "magic_link": magic_link,
+                    "user_email": email,
+                    "duration_minutes": 15,
+                },
             )
             if not email_sent:
                 logger.warning(
-                    f"Failed to send Password Reset OTP email to {email}. Code: {code}"
+                    f"Failed to send Password Reset email to {email}. Link: {magic_link}"
                 )
             else:
-                logger.info(f"Password Reset OTP sent to {email}")
+                logger.info(f"Password Reset email sent to {email}")
         except Exception as e:
-            logger.error(f"Error sending Password Reset OTP email: {e}")
-            logger.warning(f"DEV: Reset code for {email} is {code}")
+            logger.error(f"Error sending Password Reset email: {e}")
+            logger.warning(f"DEV: Reset Link for {email} is {magic_link}")
 
         return created_otp
 
@@ -122,13 +128,15 @@ class OTPService:
 
         # Send email
         try:
-            # Different base URL or path could be used based on request_type if needed
+            # Different template and path based on request_type
             if request_type == "verification":
                 path = "verify-account"
                 subject = "Verify Your LearnItIn Account"
+                template = "magic_link_verification.html"
             else:
                 path = "passwordless-signin"
                 subject = "Sign in to LearnItIn"
+                template = "magic_link_signin.html"
 
             magic_link = (
                 f"https://www.learnitin.online/app/{path}?email={email}&otp={code}"
@@ -137,7 +145,7 @@ class OTPService:
             email_sent = email_service.send_email(
                 to_email=email,
                 subject=subject,
-                template_name="magic_link.html",
+                template_name=template,
                 context={
                     "magic_link": magic_link,
                     "user_email": email,
@@ -187,7 +195,7 @@ class OTPService:
         if not otp:
             raise ValueError("Invalid or expired OTP code")
 
-        # Mark OTP as used
-        await self.otp_repository.mark_as_used(otp)
+        # Do not mark as used so it can be reused to sign-in (Improve user experience)
+        # await self.otp_repository.mark_as_used(otp)
 
         return True

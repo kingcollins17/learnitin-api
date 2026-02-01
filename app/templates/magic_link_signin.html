@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}Sign In - LearnItIn{% endblock %}
+
+{% block content %}
+<style>
+    .welcome-text {
+        font-size: 24px;
+        font-weight: 700;
+        color: #1a202c;
+        margin-bottom: 20px;
+        text-align: center;
+    }
+    
+    .instruction-text {
+        font-size: 16px;
+        color: #4a5568;
+        margin-bottom: 35px;
+        text-align: center;
+        line-height: 1.6;
+    }
+    
+    .button-container {
+        text-align: center;
+        margin-bottom: 35px;
+    }
+    
+    .magic-link-button {
+        display: inline-block;
+        background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%);
+        color: #ffffff !important;
+        font-size: 18px;
+        font-weight: 700;
+        padding: 16px 45px;
+        border-radius: 12px;
+        text-decoration: none;
+        box-shadow: 0 4px 15px rgba(22, 163, 74, 0.25);
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .raw-link-container {
+        margin-top: 30px;
+        padding: 15px;
+        background-color: #f8fafc;
+        border-radius: 8px;
+        border: 1px dashed #cbd5e0;
+    }
+    
+    .raw-link-label {
+        font-size: 12px;
+        color: #718096;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 8px;
+        display: block;
+    }
+    
+    .raw-link-text {
+        font-size: 13px;
+        color: #4a5568;
+        word-break: break-all;
+        font-family: inherit;
+    }
+    
+    .expiry-text {
+        font-size: 14px;
+        color: #718096;
+        text-align: center;
+        margin-top: 20px;
+    }
+    
+    .security-note {
+        font-size: 14px;
+        color: #718096;
+        text-align: center;
+        margin-top: 40px;
+        padding: 20px;
+        background-color: #f8fafc;
+        border-radius: 12px;
+    }
+</style>
+
+<div class="welcome-text">Instant Sign In</div>
+
+<p class="instruction-text">
+    Click the button below to sign in to your <strong>LearnItIn</strong> account instantly. This link will automatically authenticate you.
+</p>
+
+<div class="button-container">
+    <a href="{{ magic_link }}" class="magic-link-button">Sign In to LearnItIn</a>
+</div>
+
+<div class="raw-link-container">
+    <span class="raw-link-label">If the button doesn't work, copy and paste this link:</span>
+    <div class="raw-link-text">{{ magic_link }}</div>
+</div>
+
+<p class="expiry-text">
+    This link will expire in <strong>{{ duration_minutes }} minutes</strong>.
+</p>
+
+<div class="security-note">
+    <strong>Security Note:</strong> For your security, please do not share this link with anyone. If you didn't request this sign-in link, you can safely ignore this email.
+</div>
+{% endblock %}

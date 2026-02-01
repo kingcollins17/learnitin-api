@@ -9,7 +9,7 @@ from app.common.config import settings
 # Using asyncmy driver: mysql+asyncmy://user:password@host:port/database
 engine = create_async_engine(
     settings.DATABASE_URL,
-    echo=settings.DEBUG,
+    echo=settings.DB_ECHO,
     future=True,
     pool_pre_ping=True,
     pool_size=settings.DB_POOL_SIZE,
