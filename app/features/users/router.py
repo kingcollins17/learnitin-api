@@ -172,6 +172,7 @@ async def verify_user(
     3. Activates the user's account (sets is_active=True)
     4. Marks the OTP as used
 
+
     **Request Body:**
     - `email`: User's email address
     - `code`: The OTP code received via email
