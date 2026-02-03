@@ -13,8 +13,8 @@ from app.common.security import get_password_hash, verify_password
 class UserService:
     """Service for user business logic."""
 
-    def __init__(self, session: AsyncSession):
-        self.repository = UserRepository(session)
+    def __init__(self, repository: UserRepository):
+        self.repository = repository
 
     async def create_user(self, user_data: UserCreate) -> User:
         """Create a new user with hashed password."""

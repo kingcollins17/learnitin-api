@@ -15,25 +15,10 @@ from .usage_service import SubscriptionUsageService
 from .google_play_service import GooglePlayService
 
 
-async def get_subscription_service(
-    session: AsyncSession = Depends(get_async_session),
-) -> SubscriptionService:
-    """Dependency to provide SubscriptionService."""
-    return SubscriptionService(
-        session=session,
-        google_play=GooglePlayService(),
-    )
-
-
-async def get_subscription_usage_service(
-    session: AsyncSession = Depends(get_async_session),
-    sub_service: SubscriptionService = Depends(get_subscription_service),
-) -> SubscriptionUsageService:
-    """Dependency to provide SubscriptionUsageService."""
-    return SubscriptionUsageService(
-        session=session,
-        subscription_service=sub_service,
-    )
+from app.common.dependencies import (
+    get_subscription_service,
+    get_subscription_usage_service,
+)
 
 
 async def get_user_subscription(

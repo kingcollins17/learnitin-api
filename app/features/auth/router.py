@@ -17,6 +17,8 @@ from app.features.auth.schemas import (
     ResetPasswordRequest,
 )
 from app.features.auth.service import AuthService
+from app.features.users.service import UserService
+from app.features.users.repository import UserRepository
 from app.features.auth.otp_repository import OTPRepository
 from app.features.auth.otp_schemas import (
     OTPRequest,
@@ -28,8 +30,13 @@ from app.features.auth.otp_schemas import (
 router = APIRouter()
 
 
-def get_otp_service(session: AsyncSession = Depends(get_async_session)) -> OTPService:
-    return OTPService(session)
+from app.common.dependencies import (
+    get_user_repository,
+    get_user_service,
+    get_otp_repository,
+    get_otp_service,
+    get_auth_service,
+)
 
 
 @router.post(
@@ -38,7 +45,7 @@ def get_otp_service(session: AsyncSession = Depends(get_async_session)) -> OTPSe
     status_code=status.HTTP_201_CREATED,
 )
 async def register(
-    user_data: UserCreate, session: AsyncSession = Depends(get_async_session)
+    user_data: UserCreate, service: AuthService = Depends(get_auth_service)
 ):
     """
     Register a new user.
@@ -63,14 +70,7 @@ async def register(
     - `500 Internal Server Error`: Server error
     """
     try:
-        service = AuthService(session)
         user = await service.register_user(user_data)
-
-        # Automatically request verification magic link
-        otp_service = OTPService(session)
-        await otp_service.request_magic_link(
-            email=user.email, request_type="verification"
-        )
 
         return success_response(
             data=user,
@@ -91,7 +91,7 @@ async def register(
 @router.post("/login", response_model=Token)
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
-    session: AsyncSession = Depends(get_async_session),
+    service: AuthService = Depends(get_auth_service),
 ):
     """
     Login and get access token.
@@ -126,7 +126,6 @@ async def login(
     - `500 Internal Server Error`: Server error
     """
     try:
-        service = AuthService(session)
         token_data = await service.authenticate_and_get_token(
             form_data.username, form_data.password
         )
@@ -145,7 +144,7 @@ async def login(
 @router.post("/google", response_model=Token)
 async def google_login(
     data: GoogleLoginRequest,
-    session: AsyncSession = Depends(get_async_session),
+    service: AuthService = Depends(get_auth_service),
 ):
     """
     Login with Google.
@@ -166,7 +165,6 @@ async def google_login(
     - `is_active`: Always true for Google login
     """
     try:
-        service = AuthService(session)
         token_data = await service.authenticate_google_user(data.token)
         return token_data
     except HTTPException:
@@ -258,15 +256,14 @@ async def request_password_reset(
 @router.post("/password-reset/reset", response_model=ApiResponse[bool])
 async def reset_password(
     data: ResetPasswordRequest,
-    session: AsyncSession = Depends(get_async_session),
-    otp_service: OTPService = Depends(get_otp_service),
+    service: AuthService = Depends(get_auth_service),
 ):
     """
     Reset password using email, OTP and new password.
     """
     try:
         # 1. Verify OTP
-        is_valid = await otp_service.verify_otp(code=data.otp, email=data.email)
+        is_valid = await service.otp_service.verify_otp(code=data.otp, email=data.email)
         if not is_valid:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -274,10 +271,9 @@ async def reset_password(
             )
 
         # 2. Reset Password
-        auth_service = AuthService(session)
-        await auth_service.reset_password(data.email, data.new_password)
+        await service.reset_password(data.email, data.new_password)
 
-        await session.commit()
+        await service.session.commit()
 
         return success_response(
             data=True,
@@ -296,8 +292,7 @@ async def reset_password(
 @router.post("/passwordless/verify", response_model=Token)
 async def verify_magic_link(
     data: MagicLinkLoginRequest,
-    session: AsyncSession = Depends(get_async_session),
-    otp_service: OTPService = Depends(get_otp_service),
+    service: AuthService = Depends(get_auth_service),
 ):
     """
     Verify magic link OTP and login.
@@ -306,25 +301,7 @@ async def verify_magic_link(
     and returns a standard access token for the user.
     """
     try:
-        # 1. Verify OTP
-        is_valid = await otp_service.verify_otp(code=data.otp, email=data.email)
-        if not is_valid:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired link",
-            )
-
-        # 2. Authenticate and get token
-        auth_service = AuthService(session)
-        user = await auth_service.authenticate_magic_link(data.email)
-
-        # 3. Activation check (if we want to auto-activate magic link users)
-        if not user.is_active:
-            user.is_active = True
-            await auth_service.user_service.repository.update(user)
-            await session.commit()
-
-        return auth_service.generate_token_response(user)
+        return await service.verify_passwordless_login(email=data.email, otp=data.otp)
 
     except HTTPException:
         raise

@@ -38,12 +38,19 @@ from app.services.storage_service import firebase_storage_service
 class CourseService:
     """Service for course business logic."""
 
-    def __init__(self, session: AsyncSession):
+    def __init__(
+        self,
+        session: AsyncSession,
+        course_repository: CourseRepository,
+        module_repository: ModuleRepository,
+        lesson_repository: LessonRepository,
+        user_course_repository: UserCourseRepository,
+    ):
         self.session = session
-        self.repository = CourseRepository(session)
-        self.module_repository = ModuleRepository(session)
-        self.lesson_repository = LessonRepository(session)
-        self.user_course_repository = UserCourseRepository(session)
+        self.repository = course_repository
+        self.module_repository = module_repository
+        self.lesson_repository = lesson_repository
+        self.user_course_repository = user_course_repository
 
     async def create_course(self, user_id: int, course_data: CourseOutline) -> Course:
         """
@@ -433,9 +440,9 @@ class CourseService:
 class CategoryService:
     """Service for category business logic."""
 
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession, category_repository: CategoryRepository):
         self.session = session
-        self.category_repository = CategoryRepository(session)
+        self.category_repository = category_repository
 
     async def create_category(self, category_data: dict) -> Category:
         """Create a new category."""
@@ -492,10 +499,15 @@ class CategoryService:
 class SubCategoryService:
     """Service for sub-category business logic."""
 
-    def __init__(self, session: AsyncSession):
+    def __init__(
+        self,
+        session: AsyncSession,
+        subcategory_repository: SubCategoryRepository,
+        category_repository: CategoryRepository,
+    ):
         self.session = session
-        self.subcategory_repository = SubCategoryRepository(session)
-        self.category_repository = CategoryRepository(session)
+        self.subcategory_repository = subcategory_repository
+        self.category_repository = category_repository
 
     async def create_subcategory(self, sub_category_data: dict) -> SubCategory:
         """Create a new sub-category."""

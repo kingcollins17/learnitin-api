@@ -18,8 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 class OTPService:
     """Service for OTP operations."""
 
-    def __init__(self, session: AsyncSession):
-        self.otp_repository = OTPRepository(session)
+    def __init__(self, repository: OTPRepository):
+        self.otp_repository = repository
 
     async def request_otp(self, email: str) -> OTP:
         """Generate and send an OTP code."""
@@ -58,6 +58,7 @@ class OTPService:
             # In dev, we log the code so we can still proceed
             logger.warning(f"DEV: OTP code for {email} is {code}")
 
+        await self.otp_repository.session.commit()
         return created_otp
 
     async def request_password_reset_otp(self, email: str) -> OTP:
@@ -102,6 +103,7 @@ class OTPService:
             logger.error(f"Error sending Password Reset email: {e}")
             logger.warning(f"DEV: Reset Link for {email} is {magic_link}")
 
+        await self.otp_repository.session.commit()
         return created_otp
 
     async def request_magic_link(
@@ -163,6 +165,7 @@ class OTPService:
             logger.error(f"Error sending Magic Link email: {e}")
             logger.warning(f"DEV: Magic Link for {email} is {magic_link}")
 
+        await self.otp_repository.session.commit()
         return created_otp
 
     async def verify_otp(self, code: str, email: str) -> bool:

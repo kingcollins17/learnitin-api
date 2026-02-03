@@ -28,10 +28,13 @@ from .models import Subscription
 from .repository import SubscriptionRepository
 from .service import SubscriptionService
 from .usage_service import SubscriptionUsageService
+from app.common.dependencies import (
+    get_subscription_repository,
+    get_subscription_service,
+    get_subscription_usage_service,
+)
 from .dependencies import (
     get_user_subscription,
-    get_subscription_usage_service,
-    get_subscription_service,
 )
 from .schemas import (
     PubSubPayload,
@@ -128,7 +131,7 @@ async def resync_subscription(
 @router.post("/google/webhook", response_model=ApiResponse)
 async def google_play_webhook(
     payload: PubSubPayload,
-    session: AsyncSession = Depends(get_async_session),
+    repo: SubscriptionRepository = Depends(get_subscription_repository),
 ):
     """
     Handle Google Play Real-Time Developer Notifications (RTDN).
@@ -176,7 +179,6 @@ async def google_play_webhook(
 
             # Check if subscription exists in our database
             # If not, return 404 to let Google retry later (client might not have verified yet)
-            repo = SubscriptionRepository(session)
             existing = await repo.get_by_purchase_token(purchase_token)
 
             if not existing:

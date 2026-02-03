@@ -21,10 +21,12 @@ class SubscriptionService:
     def __init__(
         self,
         session: AsyncSession,
+        repository: SubscriptionRepository,
+        usage_repository: SubscriptionUsageRepository,
         google_play: GooglePlayService,
     ):
-        self.repository = SubscriptionRepository(session)
-        self.usage_repository = SubscriptionUsageRepository(session)
+        self.repository = repository
+        self.usage_repository = usage_repository
         self.google_play = google_play
 
     # ========== Private Helpers (DRY) ==========

@@ -8,10 +8,15 @@ from app.common.database.session import get_async_session
 from app.common.deps import get_current_active_user, get_current_active_user_optional
 from app.common.responses import ApiResponse, success_response
 from app.features.users.models import User
+from app.common.dependencies import (
+    get_course_service,
+    get_category_service,
+    get_subcategory_service,
+    get_course_generation_service,
+)
 from app.features.subscriptions.dependencies import (
     ResourceAccessControl,
     get_user_subscription,
-    get_subscription_service,
     get_subscription_usage_service,
     get_premium_user,
 )
@@ -50,11 +55,11 @@ router = APIRouter()
 @router.post("/generate", response_model=ApiResponse[CourseGenerationResponse])
 async def generate_courses(
     request: CourseGenerationRequest,
-    session: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user),
     _access: None = Depends(ResourceAccessControl(SubscriptionResourceType.JOURNEY)),
     subscription: Subscription = Depends(get_user_subscription),
     usage_service: SubscriptionUsageService = Depends(get_subscription_usage_service),
+    service: CourseGenerationService = Depends(get_course_generation_service),
 ):
     """
     Generate personalized course curricula using AI.
@@ -69,7 +74,6 @@ async def generate_courses(
     """
     try:
         # Generate courses via service
-        service = CourseGenerationService()
         outlines = await service.generate_courses(request, usage_service, subscription)
 
         # Set the level for each generated course
@@ -94,7 +98,7 @@ async def generate_courses(
 @router.post("/create", response_model=ApiResponse[CourseResponse])
 async def create_course(
     course_data: CourseOutline,
-    session: AsyncSession = Depends(get_async_session),
+    service: CourseService = Depends(get_course_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -105,7 +109,6 @@ async def create_course(
     """
     try:
         assert current_user.id  # Ensure user has an ID
-        service = CourseService(session)
         course = await service.create_course(current_user.id, course_data)
 
         # Enroll the creator in the course (optional: could pass usage here too if tracking)
@@ -125,7 +128,7 @@ async def create_course(
 async def update_course(
     course_id: int,
     course_update: CourseUpdate,
-    session: AsyncSession = Depends(get_async_session),
+    service: CourseService = Depends(get_course_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -142,7 +145,6 @@ async def update_course(
     """
     try:
         assert current_user.id  # Ensure user has an ID
-        service = CourseService(session)
 
         # Convert Pydantic model to dict, excluding unset fields
         update_data = course_update.model_dump(exclude_unset=True)
@@ -170,7 +172,7 @@ async def update_course(
 @router.delete("/{course_id}", response_model=ApiResponse[dict])
 async def delete_course(
     course_id: int,
-    session: AsyncSession = Depends(get_async_session),
+    service: CourseService = Depends(get_course_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -183,7 +185,6 @@ async def delete_course(
     """
     try:
         assert current_user.id  # Ensure user has an ID
-        service = CourseService(session)
 
         await service.delete_course(
             user_id=current_user.id,
@@ -209,7 +210,7 @@ async def publish_course(
     course_id: int,
     publish_data: CoursePublishRequest,
     background_tasks: BackgroundTasks,
-    session: AsyncSession = Depends(get_async_session),
+    service: CourseService = Depends(get_course_service),
     current_user: User = Depends(get_premium_user),
 ):
     """
@@ -222,7 +223,6 @@ async def publish_course(
     """
     try:
         assert current_user.id  # Ensure user has an ID
-        service = CourseService(session)
 
         update_data = {
             "category_id": publish_data.category_id,
@@ -239,7 +239,7 @@ async def publish_course(
         # Generate image in background if it's missing
         if not updated_course.image_url:
             background_tasks.add_task(
-                generate_course_image_background, course_id, session
+                generate_course_image_background, course_id, service.session
             )
 
         return success_response(
@@ -259,7 +259,7 @@ async def publish_course(
 @router.post("/{course_id}/unpublish", response_model=ApiResponse[CourseResponse])
 async def unpublish_course(
     course_id: int,
-    session: AsyncSession = Depends(get_async_session),
+    service: CourseService = Depends(get_course_service),
     current_user: User = Depends(get_premium_user),
 ):
     """
@@ -272,7 +272,6 @@ async def unpublish_course(
     """
     try:
         assert current_user.id  # Ensure user has an ID
-        service = CourseService(session)
 
         updated_course = await service.unpublish_course(
             user_id=current_user.id,
@@ -296,7 +295,7 @@ async def unpublish_course(
 @router.post("/{course_id}/enroll", response_model=ApiResponse[UserCourse])
 async def enroll_course(
     course_id: int,
-    session: AsyncSession = Depends(get_async_session),
+    service: CourseService = Depends(get_course_service),
     current_user: User = Depends(get_current_active_user),
     _access: None = Depends(ResourceAccessControl(SubscriptionResourceType.JOURNEY)),
     subscription: Subscription = Depends(get_user_subscription),
@@ -309,7 +308,6 @@ async def enroll_course(
     """
     try:
         assert current_user.id  # Ensure user has an ID
-        service = CourseService(session)
         user_course = await service.enroll_course(
             current_user.id, course_id, usage_service, subscription
         )
@@ -334,7 +332,7 @@ async def get_user_courses(
     per_page: int = Query(10, ge=1, le=100, description="Items per page"),
     search: str | None = Query(None, description="Search for a course by title"),
     level: CourseLevel | None = Query(None, description="Filter by course level"),
-    session: AsyncSession = Depends(get_async_session),
+    service: CourseService = Depends(get_course_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -351,7 +349,6 @@ async def get_user_courses(
     """
     try:
         assert current_user.id  # Ensure user has an ID
-        service = CourseService(session)
         user_courses = await service.get_user_courses(
             user_id=current_user.id,
             page=page,
@@ -387,7 +384,7 @@ async def get_user_courses(
 @router.get("/user/courses/detail", response_model=ApiResponse[UserCourseResponse])
 async def get_user_course_detail(
     course_id: int = Query(..., description="ID of the course"),
-    session: AsyncSession = Depends(get_async_session),
+    service: CourseService = Depends(get_course_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -403,7 +400,6 @@ async def get_user_course_detail(
     """
     try:
         assert current_user.id  # Ensure user has an ID
-        service = CourseService(session)
         user_course = await service.get_user_course_detail(
             user_id=current_user.id,
             course_id=course_id,
@@ -429,7 +425,7 @@ async def get_user_course_detail(
 @router.post("/categories", response_model=ApiResponse[CategoryResponse])
 async def create_category(
     category_data: CategoryCreate,
-    session: AsyncSession = Depends(get_async_session),
+    service: CategoryService = Depends(get_category_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -438,7 +434,6 @@ async def create_category(
     **Authentication required.**
     """
     try:
-        service = CategoryService(session)
         category = await service.create_category(category_data.model_dump())
 
         return success_response(
@@ -459,7 +454,7 @@ async def create_category(
 async def get_categories(
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     per_page: int = Query(100, ge=1, le=100, description="Items per page"),
-    session: AsyncSession = Depends(get_async_session),
+    service: CategoryService = Depends(get_category_service),
 ):
     """
     Get all categories.
@@ -467,7 +462,6 @@ async def get_categories(
     **No authentication required.**
     """
     try:
-        service = CategoryService(session)
         categories = await service.get_categories(page=page, per_page=per_page)
 
         return success_response(
@@ -486,7 +480,7 @@ async def get_categories(
 async def update_category(
     category_id: int,
     category_update: CategoryUpdate,
-    session: AsyncSession = Depends(get_async_session),
+    service: CategoryService = Depends(get_category_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -495,7 +489,6 @@ async def update_category(
     **Authentication required.**
     """
     try:
-        service = CategoryService(session)
         updated_category = await service.update_category(
             category_id,
             category_update.model_dump(exclude_unset=True),
@@ -518,7 +511,7 @@ async def update_category(
 @router.delete("/categories/{category_id}", response_model=ApiResponse[dict])
 async def delete_category(
     category_id: int,
-    session: AsyncSession = Depends(get_async_session),
+    service: CategoryService = Depends(get_category_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -527,7 +520,6 @@ async def delete_category(
     **Authentication required.**
     """
     try:
-        service = CategoryService(session)
         await service.delete_category(category_id)
 
         return success_response(
@@ -550,7 +542,7 @@ async def delete_category(
 @router.post("/sub-categories", response_model=ApiResponse[SubCategoryResponse])
 async def create_subcategory(
     sub_category_data: SubCategoryCreate,
-    session: AsyncSession = Depends(get_async_session),
+    service: SubCategoryService = Depends(get_subcategory_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -559,7 +551,6 @@ async def create_subcategory(
     **Authentication required.**
     """
     try:
-        service = SubCategoryService(session)
         sub_category = await service.create_subcategory(sub_category_data.model_dump())
 
         return success_response(
@@ -581,7 +572,7 @@ async def get_subcategories(
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     per_page: int = Query(100, ge=1, le=100, description="Items per page"),
     category_id: int | None = Query(None, description="Filter by category ID"),
-    session: AsyncSession = Depends(get_async_session),
+    service: SubCategoryService = Depends(get_subcategory_service),
 ):
     """
     Get all sub-categories, optionally filtered by category.
@@ -589,7 +580,6 @@ async def get_subcategories(
     **No authentication required.**
     """
     try:
-        service = SubCategoryService(session)
         sub_categories = await service.get_subcategories(
             page=page, per_page=per_page, category_id=category_id
         )
@@ -612,7 +602,7 @@ async def get_subcategories(
 async def update_subcategory(
     sub_category_id: int,
     sub_category_update: SubCategoryUpdate,
-    session: AsyncSession = Depends(get_async_session),
+    service: SubCategoryService = Depends(get_subcategory_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -621,7 +611,6 @@ async def update_subcategory(
     **Authentication required.**
     """
     try:
-        service = SubCategoryService(session)
         updated_sub_category = await service.update_subcategory(
             sub_category_id,
             sub_category_update.model_dump(exclude_unset=True),
@@ -644,7 +633,7 @@ async def update_subcategory(
 @router.delete("/sub-categories/{sub_category_id}", response_model=ApiResponse[dict])
 async def delete_subcategory(
     sub_category_id: int,
-    session: AsyncSession = Depends(get_async_session),
+    service: SubCategoryService = Depends(get_subcategory_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -653,7 +642,6 @@ async def delete_subcategory(
     **Authentication required.**
     """
     try:
-        service = SubCategoryService(session)
         await service.delete_subcategory(sub_category_id)
 
         return success_response(
@@ -680,7 +668,7 @@ async def get_courses(
     category_id: int | None = Query(None, description="Filter by category ID"),
     min_enrollees: int | None = Query(None, ge=0, description="Minimum enrollees"),
     search: str | None = Query(None, description="Search for a course by title"),
-    session: AsyncSession = Depends(get_async_session),
+    service: CourseService = Depends(get_course_service),
 ):
     """
     Get all courses with pagination and optional filters.
@@ -697,7 +685,6 @@ async def get_courses(
     **No authentication required** - returns public courses by default.
     """
     try:
-        service = CourseService(session)
         courses = await service.get_courses(
             page=page,
             per_page=per_page,
@@ -734,7 +721,7 @@ async def get_courses(
 async def get_course_detail(
     course_id: int,
     background_tasks: BackgroundTasks,
-    session: AsyncSession = Depends(get_async_session),
+    service: CourseService = Depends(get_course_service),
     current_user: User | None = Depends(get_current_active_user_optional),
 ):
     """
@@ -748,7 +735,6 @@ async def get_course_detail(
     **No authentication required** for public courses.
     """
     try:
-        service = CourseService(session)
         course = await service.get_course_detail(course_id)
 
         if not course:
@@ -768,7 +754,7 @@ async def get_course_detail(
         # Generate image in background if it's missing
         if not course.image_url:
             background_tasks.add_task(
-                generate_course_image_background, course_id, session
+                generate_course_image_background, course_id, service.session
             )
 
         return success_response(

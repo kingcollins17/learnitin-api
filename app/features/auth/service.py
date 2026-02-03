@@ -19,13 +19,28 @@ from app.features.auth.otp_service import OTPService
 class AuthService:
     """Service for authentication logic."""
 
-    def __init__(self, session: AsyncSession):
+    def __init__(
+        self,
+        session: AsyncSession,
+        user_service: UserService,
+        otp_service: OTPService,
+    ):
         self.session = session
-        self.user_service = UserService(session)
+        self.user_service = user_service
+        self.otp_service = otp_service
 
     async def register_user(self, user_data: UserCreate) -> User:
-        """Register a new user."""
-        return await self.user_service.create_user(user_data)
+        """
+        Register a new user and send verification magic link.
+        """
+        user = await self.user_service.create_user(user_data)
+
+        # Automatically request verification magic link
+        await self.otp_service.request_magic_link(
+            email=user.email, request_type="verification"
+        )
+
+        return user
 
     async def authenticate_and_get_token(self, username: str, password: str) -> dict:
         """
@@ -61,9 +76,7 @@ class AuthService:
 
         if not user.is_active:
             # Automatically request verification magic link
-
-            otp_service = OTPService(self.session)
-            await otp_service.request_magic_link(
+            await self.otp_service.request_magic_link(
                 email=user.email, request_type="verification"
             )
 
@@ -157,14 +170,50 @@ class AuthService:
         user = await self.user_service.repository.get_by_email(email)
 
         if not user:
-            # Optionally create user if they don't exist?
-            # Usually magic link is for existing users, but we can support registration too.
-            # For now, let's assume registration happens first or via Google.
-            # If we want to support registration via magic link, we'd do it here.
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found",
             )
+
+        return user
+
+    async def verify_passwordless_login(self, email: str, otp: str) -> dict:
+        """
+        Verify magic link OTP and return token response.
+        """
+        # 1. Verify OTP
+        is_valid = await self.otp_service.verify_otp(code=otp, email=email)
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired link",
+            )
+
+        # 2. Get user
+        user = await self.authenticate_magic_link(email)
+
+        # 3. Activation check (auto-activate if verification was via magic link)
+        if not user.is_active:
+            user.is_active = True
+            await self.user_service.repository.update(user)
+            await self.session.commit()
+
+        return self.generate_token_response(user)
+
+    async def verify_and_activate_account(self, email: str, code: str) -> User:
+        """
+        Verify account using OTP and activate user.
+        """
+        # 1. Verify OTP
+        await self.otp_service.verify_and_validate_otp_for_user(
+            code=code, user_email=email
+        )
+
+        # 2. Activate the user
+        user = await self.user_service.activate_user(email)
+
+        # 3. Commit the changes
+        await self.session.commit()
 
         return user
 

@@ -15,9 +15,10 @@ class SubscriptionUsageService:
     def __init__(
         self,
         session: AsyncSession,
+        repository: SubscriptionUsageRepository,
         subscription_service: SubscriptionService,
     ):
-        self.repository = SubscriptionUsageRepository(session)
+        self.repository = repository
         self.subscription_service = subscription_service
 
     async def increment_usage(

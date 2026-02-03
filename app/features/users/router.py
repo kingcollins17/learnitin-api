@@ -19,8 +19,10 @@ from app.features.users.schemas import (
 
 #
 from app.features.users.service import UserService
+from app.features.users.repository import UserRepository
 from app.features.auth.otp_service import OTPService
 from app.features.auth.otp_repository import OTPRepository
+from app.features.auth.service import AuthService
 from app.features.subscriptions.dependencies import (
     get_user_subscription,
     get_subscription_usage_service,
@@ -31,6 +33,15 @@ from app.features.subscriptions.usage_service import SubscriptionUsageService
 
 
 router = APIRouter()
+
+
+from app.common.dependencies import (
+    get_user_repository,
+    get_user_service,
+    get_otp_repository,
+    get_otp_service,
+    get_auth_service,
+)
 
 
 @router.get("/me", response_model=ApiResponse[UserResponse])
@@ -70,12 +81,11 @@ async def read_users_me(
 @router.get("/{user_id}", response_model=ApiResponse[UserResponse])
 async def read_user(
     user_id: int,
-    session: AsyncSession = Depends(get_async_session),
+    service: UserService = Depends(get_user_service),
     current_user: UserModel = Depends(get_current_active_user),
 ):
     """Get user by ID (requires authentication)."""
     try:
-        service = UserService(session)
         user = await service.get_user(user_id)
         return success_response(data=user, details="User retrieved successfully")
     except HTTPException:
@@ -93,7 +103,7 @@ async def read_user(
 async def update_user(
     user_id: int,
     user_data: UserUpdate,
-    session: AsyncSession = Depends(get_async_session),
+    service: UserService = Depends(get_user_service),
     current_user: UserModel = Depends(get_current_active_user),
 ):
     """Update user information."""
@@ -105,7 +115,6 @@ async def update_user(
                 detail="Not authorized to update this user",
             )
 
-        service = UserService(session)
         user = await service.update_user(user_id, user_data)
         return success_response(data=user, details="User updated successfully")
     except HTTPException:
@@ -123,7 +132,7 @@ async def update_user(
 async def list_users(
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     per_page: int = Query(10, ge=1, le=100, description="Items per page"),
-    session: AsyncSession = Depends(get_async_session),
+    service: UserService = Depends(get_user_service),
     current_user: UserModel = Depends(get_current_active_user),
 ):
     """
@@ -140,7 +149,6 @@ async def list_users(
         skip = (page - 1) * per_page
         limit = per_page
 
-        service = UserService(session)
         users = await service.get_users(skip=skip, limit=limit)
         return success_response(
             data=users, details=f"Retrieved {len(users)} users (page {page})"
@@ -159,7 +167,7 @@ async def list_users(
 @router.post("/verify", response_model=ApiResponse[UserResponse])
 async def verify_user(
     data: UserVerifyRequest,
-    session: AsyncSession = Depends(get_async_session),
+    service: AuthService = Depends(get_auth_service),
 ):
     """
     Verify a user's account using an OTP code.
@@ -187,20 +195,13 @@ async def verify_user(
     - `500 Internal Server Error`: Server error
     """
     try:
-        # Initialize services
-        otp_service = OTPService(session)
-        user_service = UserService(session)
-
-        # Verify OTP belongs to the user and mark as used
-        await otp_service.verify_and_validate_otp_for_user(
-            code=data.code, user_email=data.email
+        # Verify and activate using AuthService (which coordinates OTP and User services)
+        user = await service.verify_and_activate_account(
+            email=data.email, code=data.code
         )
 
-        # Activate the user
-        user = await user_service.activate_user(data.email)
-
         # Commit the transaction
-        await session.commit()
+        await service.session.commit()
 
         return success_response(
             data=user, details="User verified and activated successfully"
@@ -229,7 +230,7 @@ async def verify_user(
 @router.put("/me/device-token", response_model=ApiResponse[UserResponse])
 async def update_device_token(
     data: DeviceTokenUpdate,
-    session: AsyncSession = Depends(get_async_session),
+    service: UserService = Depends(get_user_service),
     current_user: UserModel = Depends(get_current_active_user),
 ):
     """
@@ -237,9 +238,8 @@ async def update_device_token(
     """
     try:
         assert current_user.id
-        service = UserService(session)
         user = await service.update_device_token(current_user.id, data.device_reg_token)
-        await session.commit()
+        await service.repository.session.commit()
         return success_response(data=user, details="Device token updated successfully")
     except HTTPException:
         raise
