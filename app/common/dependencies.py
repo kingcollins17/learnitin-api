@@ -10,6 +10,8 @@ from app.features.auth.otp_repository import OTPRepository
 from app.features.users.service import UserService
 from app.features.auth.otp_service import OTPService
 from app.features.auth.service import AuthService
+from app.features.reviews.repository import ReviewRepository
+from app.features.reviews.service import ReviewService
 
 # --- Courses ---
 from app.features.courses.repository import (
@@ -20,6 +22,7 @@ from app.features.courses.repository import (
 )
 from app.features.modules.repository import ModuleRepository
 from app.features.lessons.repository import LessonRepository
+from app.features.reviews.repository import ReviewRepository
 from app.features.courses.service import (
     CourseService,
     CategoryService,
@@ -68,6 +71,14 @@ def get_auth_service(
     return AuthService(session, user_service, otp_service)
 
 
+# Review feature dependencies
+def get_review_repository(
+    session: AsyncSession = Depends(get_async_session),
+) -> ReviewRepository:
+    """Dependency for review repository."""
+    return ReviewRepository(session)
+
+
 # ========== Courses Dependencies ==========
 
 
@@ -75,6 +86,16 @@ def get_course_repository(
     session: AsyncSession = Depends(get_async_session),
 ) -> CourseRepository:
     return CourseRepository(session)
+
+
+# ========== Review Service Dependency ==========
+def get_review_service(
+    session: AsyncSession = Depends(get_async_session),
+    review_repo: ReviewRepository = Depends(get_review_repository),
+    course_repo: CourseRepository = Depends(get_course_repository),
+) -> ReviewService:
+    """Dependency for review service."""
+    return ReviewService(session, review_repo, course_repo)
 
 
 def get_module_repository(
@@ -117,9 +138,15 @@ def get_course_service(
     module_repo: ModuleRepository = Depends(get_module_repository),
     lesson_repo: LessonRepository = Depends(get_lesson_repository),
     user_course_repo: UserCourseRepository = Depends(get_user_course_repository),
+    review_repo: ReviewRepository = Depends(get_review_repository),
 ) -> CourseService:
     return CourseService(
-        session, course_repo, module_repo, lesson_repo, user_course_repo
+        session,
+        course_repo,
+        module_repo,
+        lesson_repo,
+        user_course_repo,
+        review_repo,
     )
 
 

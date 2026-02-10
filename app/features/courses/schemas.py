@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
 from app.features.courses.models import LearningPace, CourseLevel, ProgressStatus
+from app.features.reviews.schemas import ReviewSummary
 
 
 class LessonOverview(BaseModel):
@@ -63,8 +64,8 @@ class CourseGenerationRequest(BaseModel):
 class CourseGenerationResponse(BaseModel):
     """Response schema for generated courses."""
 
-    courses: List[CourseOutline] = Field(
-        description="List of generated course outlines"
+    courses: Optional[List[CourseOutline]] = Field(
+        default=None, description="List of generated course outlines"
     )
 
     class Config:
@@ -74,7 +75,7 @@ class CourseGenerationResponse(BaseModel):
 class CategoryBase(BaseModel):
     """Base category schema."""
 
-    name: str
+    name: Optional[str] = None
     description: Optional[str] = None
 
 
@@ -94,8 +95,8 @@ class CategoryUpdate(BaseModel):
 class CategoryResponse(CategoryBase):
     """Schema for category response."""
 
-    id: int
-    created_at: datetime
+    id: Optional[int] = None
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -104,9 +105,9 @@ class CategoryResponse(CategoryBase):
 class SubCategoryBase(BaseModel):
     """Base sub-category schema."""
 
-    name: str
+    name: Optional[str] = None
     description: Optional[str] = None
-    category_id: int
+    category_id: Optional[int] = None
 
 
 class SubCategoryCreate(SubCategoryBase):
@@ -126,8 +127,8 @@ class SubCategoryUpdate(BaseModel):
 class SubCategoryResponse(SubCategoryBase):
     """Schema for sub-category response."""
 
-    id: int
-    created_at: datetime
+    id: Optional[int] = None
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -137,11 +138,11 @@ class SubCategoryResponse(SubCategoryBase):
 class CourseBase(BaseModel):
     """Base course schema with common fields."""
 
-    title: str
-    description: str
-    duration: str
+    title: Optional[str] = None
+    description: Optional[str] = None
+    duration: Optional[str] = None
     image_url: Optional[str] = None
-    is_public: bool = False
+    is_public: Optional[bool] = False
     category_id: Optional[int] = None
     sub_category_id: Optional[int] = None
 
@@ -174,16 +175,17 @@ class CoursePublishRequest(BaseModel):
 class CourseResponse(CourseBase):
     """Schema for course responses."""
 
-    id: int
-    user_id: int
-    level: CourseLevel = CourseLevel.BEGINNER
-    learning_pace: LearningPace = LearningPace.BALANCED
-    total_enrollees: int = 0
+    id: Optional[int] = None
+    user_id: Optional[int] = None
+    level: Optional[CourseLevel] = CourseLevel.BEGINNER
+    learning_pace: Optional[LearningPace] = LearningPace.BALANCED
+    total_enrollees: Optional[int] = 0
 
-    created_at: datetime
+    created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     category: Optional["CategoryResponse"] = None
     sub_category: Optional["SubCategoryResponse"] = None
+    review_summary: Optional[ReviewSummary] = None
 
     class Config:
         from_attributes = True
@@ -192,11 +194,11 @@ class CourseResponse(CourseBase):
 class LessonResponse(BaseModel):
     """Schema for lesson response."""
 
-    id: int
-    title: str
+    id: Optional[int] = None
+    title: Optional[str] = None
     description: Optional[str] = None
     objectives: Optional[str] = None  # JSON string of objectives list
-    order: int
+    order: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -205,12 +207,12 @@ class LessonResponse(BaseModel):
 class ModuleResponse(BaseModel):
     """Schema for module response."""
 
-    id: int
-    title: str
+    id: Optional[int] = None
+    title: Optional[str] = None
     description: Optional[str] = None
     objectives: Optional[str] = None  # JSON string of objectives list
-    order: int
-    lessons: List[LessonResponse] = []
+    order: Optional[int] = None
+    lessons: Optional[List[LessonResponse]] = []
 
     class Config:
         from_attributes = True
@@ -219,21 +221,21 @@ class ModuleResponse(BaseModel):
 class CourseDetailResponse(CourseResponse):
     """Schema for course detail response including modules."""
 
-    modules: List[ModuleResponse] = []
+    modules: Optional[List[ModuleResponse]] = []
 
 
 class UserCourseResponse(BaseModel):
     """Schema for user course response."""
 
-    id: int
-    course_id: int
-    user_id: int
-    status: ProgressStatus
-    completed_modules: int
-    total_modules: int
+    id: Optional[int] = None
+    course_id: Optional[int] = None
+    user_id: Optional[int] = None
+    status: Optional[ProgressStatus] = None
+    completed_modules: Optional[int] = None
+    total_modules: Optional[int] = None
     current_module_id: Optional[int] = None
     current_lesson_id: Optional[int] = None
-    course: CourseResponse
+    course: Optional[CourseResponse] = None
 
     class Config:
         from_attributes = True
@@ -242,10 +244,10 @@ class UserCourseResponse(BaseModel):
 class PaginatedCoursesResponse(BaseModel):
     """Schema for paginated courses response."""
 
-    courses: List[CourseResponse]
-    page: int
-    per_page: int
-    total: int
+    courses: Optional[List[CourseResponse]] = None
+    page: Optional[int] = None
+    per_page: Optional[int] = None
+    total: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -254,10 +256,10 @@ class PaginatedCoursesResponse(BaseModel):
 class PaginatedUserCoursesResponse(BaseModel):
     """Schema for paginated user courses response."""
 
-    courses: List[UserCourseResponse]
-    page: int
-    per_page: int
-    total: int
+    courses: Optional[List[UserCourseResponse]] = None
+    page: Optional[int] = None
+    per_page: Optional[int] = None
+    total: Optional[int] = None
 
     class Config:
         from_attributes = True

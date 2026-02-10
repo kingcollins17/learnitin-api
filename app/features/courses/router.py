@@ -292,7 +292,7 @@ async def unpublish_course(
         )
 
 
-@router.post("/{course_id}/enroll", response_model=ApiResponse[UserCourse])
+@router.post("/{course_id}/enroll", response_model=ApiResponse[UserCourseResponse])
 async def enroll_course(
     course_id: int,
     service: CourseService = Depends(get_course_service),
@@ -357,20 +357,13 @@ async def get_user_courses(
             level=level,
         )
 
-        # Convert SQLModel objects to Pydantic schemas
-        user_courses_response = [
-            UserCourseResponse.model_validate(uc) for uc in user_courses
-        ]
-
-        response_data = PaginatedUserCoursesResponse(
-            courses=user_courses_response,
-            page=page,
-            per_page=per_page,
-            total=len(user_courses),
-        )
-
         return success_response(
-            data=response_data,
+            data=PaginatedUserCoursesResponse(
+                courses=user_courses,
+                page=page,
+                per_page=per_page,
+                total=len(user_courses),
+            ),
             details=f"Retrieved {len(user_courses)} enrolled course(s)",
         )
     except Exception as e:
@@ -695,18 +688,13 @@ async def get_courses(
             search=search,
         )
 
-        # Convert SQLModel objects to Pydantic schemas
-        courses_response = [CourseResponse.model_validate(c) for c in courses]
-
-        response_data = PaginatedCoursesResponse(
-            courses=courses_response,
-            page=page,
-            per_page=per_page,
-            total=len(courses),
-        )
-
         return success_response(
-            data=response_data,
+            data=PaginatedCoursesResponse(
+                courses=courses,
+                page=page,
+                per_page=per_page,
+                total=len(courses),
+            ),
             details=f"Retrieved {len(courses)} course(s)",
         )
     except Exception as e:

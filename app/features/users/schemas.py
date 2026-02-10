@@ -8,8 +8,8 @@ from datetime import datetime
 class UserBase(BaseModel):
     """Base user schema with common fields."""
 
-    email: EmailStr
-    username: str
+    email: Optional[EmailStr] = None
+    username: Optional[str] = None
     full_name: Optional[str] = None
 
 
@@ -34,10 +34,10 @@ from app.features.subscriptions.schemas import SubscriptionResponse
 class UserResponse(UserBase):
     """Schema for user responses."""
 
-    id: int
-    is_active: bool
-    is_superuser: bool
-    created_at: datetime
+    id: Optional[int] = None
+    is_active: Optional[bool] = None
+    is_superuser: Optional[bool] = None
+    created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     subscription: Optional[SubscriptionResponse] = None
 

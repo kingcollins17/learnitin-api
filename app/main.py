@@ -14,6 +14,7 @@ from app.features.notifications.router import router as notifications_router
 from app.features.quiz.router import router as quiz_router
 from app.features.subscriptions.router import router as subscriptions_router
 from app.features.logs.router import router as logs_router
+from app.features.reviews.router import router as reviews_router
 from app.features.notifications.handlers import handle_in_app_push_for_fcm
 from app.features.logs.handlers import handle_log_event
 from app.common.events import NotificationInAppPushEvent, LogEvent
@@ -124,6 +125,11 @@ app.include_router(
     logs_router,
     prefix=f"{settings.API_V1_PREFIX}/logs",
     tags=["Logs"],
+)
+app.include_router(
+    reviews_router,
+    prefix=f"{settings.API_V1_PREFIX}/reviews",
+    tags=["Reviews"],
 )
 
 

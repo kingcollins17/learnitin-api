@@ -18,6 +18,11 @@ class UserService:
 
     async def create_user(self, user_data: UserCreate) -> User:
         """Create a new user with hashed password."""
+        if not user_data.email or not user_data.username:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email and username are required",
+            )
         # Check if user already exists
         existing_user = await self.repository.get_by_email(user_data.email)
         if existing_user:

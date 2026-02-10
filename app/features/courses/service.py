@@ -1,12 +1,14 @@
 """Course business logic and service layer."""
 
 from fastapi import HTTPException, status
-from typing import List, Optional
+from typing import List, Optional, TypeVar
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.features.courses.repository import CourseRepository
 from app.features.courses.schemas import (
     CourseOutline,
     CourseResponse,
+    CourseDetailResponse,
+    UserCourseResponse,
 )
 from app.features.courses.models import (
     Course,
@@ -25,6 +27,8 @@ from app.features.courses.repository import (
     CategoryRepository,
     SubCategoryRepository,
 )
+from app.features.reviews.repository import ReviewRepository, get_cached_summary
+from app.features.reviews.schemas import ReviewSummary
 from app.common.events import event_bus, CourseEnrolledEvent
 from app.features.subscriptions.models import Subscription, SubscriptionResourceType
 from app.features.subscriptions.usage_service import SubscriptionUsageService
@@ -33,6 +37,9 @@ import re
 import uuid
 from app.services.image_generation_service import image_generation_service
 from app.services.storage_service import firebase_storage_service
+
+
+T = TypeVar("T", bound=CourseResponse)
 
 
 class CourseService:
@@ -45,14 +52,20 @@ class CourseService:
         module_repository: ModuleRepository,
         lesson_repository: LessonRepository,
         user_course_repository: UserCourseRepository,
+        review_repository: ReviewRepository,
     ):
         self.session = session
         self.repository = course_repository
         self.module_repository = module_repository
         self.lesson_repository = lesson_repository
         self.user_course_repository = user_course_repository
+        self.review_repository = review_repository
 
-    async def create_course(self, user_id: int, course_data: CourseOutline) -> Course:
+    async def create_course(
+        self,
+        user_id: int,
+        course_data: CourseOutline,
+    ) -> CourseResponse:
         """
         Create a new course from a course outline.
 
@@ -108,7 +121,7 @@ class CourseService:
                 )
                 await self.lesson_repository.create(lesson)
 
-        return course
+        return CourseResponse.model_validate(course)
 
     async def generate_course_image(self, course_id: int) -> Optional[str]:
         """
@@ -159,7 +172,7 @@ class CourseService:
         course_id: int,
         usage_service: Optional[SubscriptionUsageService] = None,
         subscription: Optional[Subscription] = None,
-    ) -> UserCourse:
+    ) -> UserCourseResponse:
         """
         Enroll a user in a course.
 
@@ -205,7 +218,7 @@ class CourseService:
         # Emit course enrolled event
         event_bus.dispatch(CourseEnrolledEvent(user_id=user_id, course_id=course_id))
 
-        return user_course
+        return UserCourseResponse.model_validate(user_course)
 
     def _create_slug(self, text: str) -> str:
         """Create a URL-friendly slug from text."""
@@ -224,7 +237,7 @@ class CourseService:
         sub_category_id: Optional[int] = None,
         min_enrollees: Optional[int] = None,
         search: Optional[str] = None,
-    ) -> List[Course]:
+    ) -> List[CourseResponse]:
         """
         Get all courses with pagination and filters.
 
@@ -241,7 +254,7 @@ class CourseService:
             List of courses matching the filters
         """
         skip = (page - 1) * per_page
-        return await self.repository.get_all_with_filters(
+        courses = await self.repository.get_all_with_filters(
             skip=skip,
             limit=per_page,
             is_public=is_public,
@@ -251,8 +264,10 @@ class CourseService:
             min_enrollees=min_enrollees,
             search=search,
         )
+        course_responses = [CourseResponse.model_validate(course) for course in courses]
+        return await self._attach_review_summaries(course_responses)
 
-    async def get_course_detail(self, course_id: int) -> Optional[Course]:
+    async def get_course_detail(self, course_id: int) -> Optional[CourseDetailResponse]:
         """
         Get course detail with all modules and lessons.
 
@@ -262,7 +277,11 @@ class CourseService:
         Returns:
             Course with modules and lessons, or None if not found
         """
-        return await self.repository.get_with_modules(course_id)
+        course = await self.repository.get_with_modules(course_id)
+        if course:
+            response = CourseDetailResponse.model_validate(course)
+            return await self._attach_review_summary(response)
+        return None
 
     async def get_user_courses(
         self,
@@ -271,7 +290,7 @@ class CourseService:
         per_page: int = 10,
         search: Optional[str] = None,
         level: Optional[str] = None,
-    ) -> List[UserCourse]:
+    ) -> List[UserCourseResponse]:
         """
         Get all courses enrolled by a user.
 
@@ -284,13 +303,20 @@ class CourseService:
             List of user courses with course details
         """
         skip = (page - 1) * per_page
-        return await self.user_course_repository.get_by_user_with_course(
+        user_courses = await self.user_course_repository.get_by_user_with_course(
             user_id=user_id, skip=skip, limit=per_page, search=search, level=level
         )
 
+        responses = [UserCourseResponse.model_validate(uc) for uc in user_courses]
+
+        for resp in responses:
+            if resp.course:
+                await self._attach_review_summary(resp.course)
+        return responses
+
     async def get_user_course_detail(
         self, user_id: int, course_id: int
-    ) -> Optional[UserCourse]:
+    ) -> Optional[UserCourseResponse]:
         """
         Get user course detail.
 
@@ -316,11 +342,29 @@ class CourseService:
                 detail="User course not found",
             )
 
-        return user_course
+        response = UserCourseResponse.model_validate(user_course)
+        if response.course:
+            await self._attach_review_summary(response.course)
+
+        return response
+
+    async def _attach_review_summary(self, course: T) -> T:
+        """Helper to attach a review summary to a single course response."""
+        if course.id:
+            summary = await get_cached_summary(course.id, self.review_repository)
+            if summary:
+                course.review_summary = ReviewSummary.model_validate(summary)
+        return course
+
+    async def _attach_review_summaries(self, courses: List[T]) -> List[T]:
+        """Helper to attach review summaries to a list of course responses."""
+        for course in courses:
+            await self._attach_review_summary(course)
+        return courses
 
     async def update_course(
         self, user_id: int, course_id: int, course_update: dict
-    ) -> Course:
+    ) -> CourseResponse:
         """
         Update a course.
 
@@ -360,9 +404,10 @@ class CourseService:
         # Update timestamp
         course.updated_at = datetime.now(timezone.utc)
 
-        return await self.repository.update(course)
+        updated_course = await self.repository.update(course)
+        return CourseResponse.model_validate(updated_course)
 
-    async def unpublish_course(self, user_id: int, course_id: int) -> Course:
+    async def unpublish_course(self, user_id: int, course_id: int) -> CourseResponse:
         """
         Unpublish a course.
 
@@ -406,7 +451,8 @@ class CourseService:
 
         course.updated_at = datetime.now(timezone.utc)
 
-        return await self.repository.update(course)
+        updated_course = await self.repository.update(course)
+        return CourseResponse.model_validate(updated_course)
 
     async def delete_course(self, user_id: int, course_id: int) -> None:
         """
