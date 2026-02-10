@@ -1,12 +1,9 @@
 """Lesson request/response schemas."""
 
 from pydantic import BaseModel, Field, field_validator
-from typing import List, Optional, TYPE_CHECKING
+from typing import List, Optional
 from datetime import datetime
 from app.features.courses.models import ProgressStatus
-
-if TYPE_CHECKING:
-    from app.features.lessons.models import UserLesson
 
 
 class LessonAudioResponse(BaseModel):
@@ -185,7 +182,7 @@ class StartLessonResponse(BaseModel):
 class CompleteLessonResult(BaseModel):
     """Service layer result for completing a lesson."""
 
-    user_lesson: "UserLesson"  # Forward reference to avoid circular import
+    user_lesson: UserLessonResponse
     has_completed_module: bool
     has_completed_course: bool
 
