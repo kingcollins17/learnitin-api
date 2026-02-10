@@ -38,6 +38,7 @@ from app.features.lessons.schemas import (
     PaginatedUserLessonsResponse,
     LessonAudioResponse,
     StartLessonResponse,
+    CompleteLessonResponse,
 )
 from app.features.lessons.service import LessonService, UserLessonService
 from app.features.lessons.lecture_service import lecture_conversion_service
@@ -52,6 +53,8 @@ from app.features.lessons.tasks import (
 )
 from app.features.lessons.lesson_audio_tracker import audio_tracker
 from app.features.lessons.lesson_content_tracker import content_tracker
+from app.common.events.bus import event_bus
+from app.common.events import CourseCompletedEvent
 
 router = APIRouter()
 
@@ -605,7 +608,9 @@ async def complete_quiz(
         )
 
 
-@router.post("/user/lessons/complete", response_model=ApiResponse[UserLessonResponse])
+@router.post(
+    "/user/lessons/complete", response_model=ApiResponse[CompleteLessonResponse]
+)
 async def complete_lesson(
     lesson_id: int = Query(..., description="ID of the lesson"),
     session: AsyncSession = Depends(get_async_session),
@@ -619,13 +624,28 @@ async def complete_lesson(
     try:
         assert current_user.id
         service = UserLessonService(session)
-        user_lesson = await service.complete_lesson(
+        result = await service.complete_lesson(
             user_id=current_user.id,
             lesson_id=lesson_id,
         )
 
+        response_data = CompleteLessonResponse(
+            user_lesson=UserLessonResponse.model_validate(result.user_lesson),
+            has_completed_module=result.has_completed_module,
+            has_completed_course=result.has_completed_course,
+        )
+
+        # Dispatch event if course completed
+        if result.has_completed_course:
+            await event_bus.dispatch(
+                CourseCompletedEvent(
+                    course_id=result.user_lesson.course_id,
+                    user_id=current_user.id,
+                )
+            )
+
         return success_response(
-            data=user_lesson,
+            data=response_data,
             details="Lesson completed successfully",
         )
     except HTTPException:

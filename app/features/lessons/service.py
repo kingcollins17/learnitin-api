@@ -21,6 +21,7 @@ from app.services.storage_service import firebase_storage_service
 from app.features.subscriptions.models import Subscription, SubscriptionResourceType
 from app.features.subscriptions.usage_service import SubscriptionUsageService
 from app.services.audio_conversion_service import validate_audio_bytes
+from app.features.lessons.schemas import CompleteLessonResult
 
 
 class LessonService:
@@ -604,7 +605,9 @@ class UserLessonService:
             update_data={"is_quiz_completed": True},
         )
 
-    async def complete_lesson(self, user_id: int, lesson_id: int) -> UserLesson:
+    async def complete_lesson(
+        self, user_id: int, lesson_id: int
+    ) -> CompleteLessonResult:
         """
         Mark a lesson as completed for a user.
 
@@ -613,7 +616,7 @@ class UserLessonService:
             lesson_id: ID of the lesson
 
         Returns:
-            Updated UserLesson object
+            CompleteLessonResult object
         """
         # Verify lesson exists
         lesson = await self.lesson_repo.get_by_id(lesson_id)
@@ -630,8 +633,20 @@ class UserLessonService:
         )
 
         # Check if this was the last lesson in the module and complete it
-        await self.user_module_service.check_and_complete_module(
+        has_completed_module = await self.user_module_service.check_and_complete_module(
             user_id=user_id, module_id=lesson.module_id
         )
 
-        return user_lesson
+        # Check if course is completed
+        user_course = await self.user_course_repo.get_by_user_and_course(
+            user_id=user_id, course_id=lesson.course_id
+        )
+        has_completed_course = (
+            user_course.status == ProgressStatus.COMPLETED if user_course else False
+        )
+
+        return CompleteLessonResult(
+            user_lesson=user_lesson,
+            has_completed_module=has_completed_module,
+            has_completed_course=has_completed_course,
+        )
