@@ -76,6 +76,30 @@ async def get_course_reviews(
 
 
 @router.get(
+    "/course/{course_id}/me",
+    response_model=ApiResponse[ReviewResponse],
+)
+async def get_user_course_review(
+    course_id: int,
+    current_user: User = Depends(get_current_active_user),
+    service: ReviewService = Depends(get_review_service),
+):
+    """
+    Get current user's review for a specific course.
+
+    Returns the review record if the current user has reviewed the course.
+
+    **Authentication:**
+    - Required (Bearer Token)
+    """
+    assert current_user.id is not None
+    review = await service.get_user_course_review(
+        user_id=current_user.id, course_id=course_id
+    )
+    return success_response(data=review)
+
+
+@router.get(
     "/course/{course_id}/summary",
     response_model=ApiResponse[ReviewSummary],
 )

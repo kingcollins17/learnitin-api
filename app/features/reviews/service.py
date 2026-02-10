@@ -143,6 +143,30 @@ class ReviewService:
         )
         return [ReviewResponse.model_validate(r) for r in reviews]
 
+    async def get_user_course_review(
+        self, user_id: int, course_id: int
+    ) -> ReviewResponse:
+        """
+        Get a specific user's review for a course.
+
+        Args:
+            user_id: The ID of the user.
+            course_id: The ID of the course.
+
+        Returns:
+            ReviewResponse: The found review.
+
+        Raises:
+            HTTPException: 404 if the review does not exist.
+        """
+        review = await self.review_repo.get(user_id=user_id, course_id=course_id)
+        if not review:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Review not found for this course",
+            )
+        return ReviewResponse.model_validate(review)
+
     async def update_review(
         self, user_id: int, review_id: int, review_in: ReviewUpdate
     ) -> ReviewResponse:

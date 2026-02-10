@@ -6,6 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import joinedload
 from sqlmodel import select, col
 from app.features.reviews.models import Review
+from app.features.courses.models import Course
 
 from async_lru import alru_cache
 
@@ -24,7 +25,9 @@ class ReviewRepository:
     ) -> Optional[Review]:
         """Get a review with optional filters."""
         query = select(Review).options(
-            joinedload(Review.user), joinedload(Review.course)  # type: ignore
+            joinedload(Review.user),  # type: ignore
+            joinedload(Review.course).joinedload(Course.category),  # type: ignore
+            joinedload(Review.course).joinedload(Course.sub_category),  # type: ignore
         )
         if review_id is not None:
             query = query.where(Review.id == review_id)
@@ -45,7 +48,9 @@ class ReviewRepository:
     ) -> List[Review]:
         """Get all reviews with optional filters and pagination."""
         query = select(Review).options(
-            joinedload(Review.user), joinedload(Review.course)  # type: ignore
+            joinedload(Review.user),  # type: ignore
+            joinedload(Review.course).joinedload(Course.category),  # type: ignore
+            joinedload(Review.course).joinedload(Course.sub_category),  # type: ignore
         )
         if user_id is not None:
             query = query.where(Review.user_id == user_id)
@@ -60,15 +65,23 @@ class ReviewRepository:
         """Create a new review."""
         self.session.add(review)
         await self.session.flush()
-        await self.session.refresh(review)
-        return review
+        # Re-fetch with relationships for the response
+        refetched = await self.get(review_id=review.id)
+        if refetched is None:  # Should not happen after flush
+            await self.session.refresh(review)
+            return review
+        return refetched
 
     async def update(self, review: Review) -> Review:
         """Update an existing review."""
         self.session.add(review)
         await self.session.flush()
-        await self.session.refresh(review)
-        return review
+        # Re-fetch with relationships for the response
+        refetched = await self.get(review_id=review.id)
+        if refetched is None:  # Should not happen after flush
+            await self.session.refresh(review)
+            return review
+        return refetched
 
     async def delete(self, review: Review) -> None:
         """Delete a review."""
