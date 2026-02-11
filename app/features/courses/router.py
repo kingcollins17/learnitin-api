@@ -13,6 +13,8 @@ from app.common.dependencies import (
     get_category_service,
     get_subcategory_service,
     get_course_generation_service,
+    get_db_maintenance_service,
+    DBMaintenanceService,
     run_db_maintenance_in_bg,
 )
 from app.features.subscriptions.dependencies import (
@@ -173,7 +175,9 @@ async def update_course(
 @router.delete("/{course_id}", response_model=ApiResponse[dict])
 async def delete_course(
     course_id: int,
+    bg: BackgroundTasks,
     service: CourseService = Depends(get_course_service),
+    maintenance_service: DBMaintenanceService = Depends(get_db_maintenance_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -191,6 +195,9 @@ async def delete_course(
             user_id=current_user.id,
             course_id=course_id,
         )
+
+        # Run DB maintenance in background
+        bg.add_task(maintenance_service.run_all_maintenance)
 
         return success_response(
             data={"course_id": course_id},

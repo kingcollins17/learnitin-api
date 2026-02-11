@@ -3,6 +3,7 @@
 import os
 import uuid
 import json
+import logging
 from typing import Optional
 import datetime
 
@@ -10,6 +11,9 @@ import firebase_admin
 from firebase_admin import credentials, storage
 
 from app.common.config import Settings
+
+
+logger = logging.getLogger(__name__)
 
 
 class FirebaseStorageService:
@@ -39,14 +43,14 @@ class FirebaseStorageService:
                     firebase_admin.initialize_app(cred, options)
                     return
                 except Exception as e:
-                    print(f"Error loading explicit Firebase credentials: {e}")
+                    logger.error(f"Error loading explicit Firebase credentials: {e}")
 
             # Fallback: Initialize with Google Application Default Credentials
             # This works automatically on Cloud Run or locally if GOOGLE_APPLICATION_CREDENTIALS is set
             try:
                 firebase_admin.initialize_app(options=options)
             except Exception as e:
-                print(f"Firebase default initialization fallback: {e}")
+                logger.error(f"Firebase default initialization fallback: {e}")
 
     def upload_bytes(
         self,
@@ -164,11 +168,11 @@ class FirebaseStorageService:
             blob = bucket.blob(path)
             if blob.exists():
                 blob.delete()
-                print(f"Successfully deleted {path} from storage.")
+                logger.info(f"Successfully deleted {path} from storage.")
                 return True
             else:
-                print(f"File {path} does not exist in storage.")
-                return False
+                logger.info(f"File {path} does not exist in storage.")
+                return True
         except Exception as e:
-            print(f"Error deleting file from storage: {e}")
+            logger.error(f"Error deleting file from storage: {e}")
             return False

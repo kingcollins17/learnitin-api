@@ -38,7 +38,10 @@ class Module(SQLModel, table=True):
     updated_at: Optional[datetime] = Field(default=None)
 
     course: "Course" = Relationship(back_populates="modules")
-    lessons: List["Lesson"] = Relationship(back_populates="module")
+    lessons: List["Lesson"] = Relationship(
+        back_populates="module",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
 
     class Config:
         """Pydantic config."""

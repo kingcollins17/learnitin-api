@@ -507,6 +507,15 @@ class CourseService(Commitable):
                 detail="Public courses cannot be deleted",
             )
 
+        # Delete course image from storage if it exists
+        if course.image_url:
+            deleted = self.storage_service.delete_file(course.image_url)
+            if not deleted:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to delete course assets from storage. Course deletion aborted to prevent orphaned files.",
+                )
+
         await self.repository.delete(course)
 
 

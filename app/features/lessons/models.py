@@ -29,7 +29,14 @@ class Lesson(SQLModel, table=True):
         ),
     )
 
-    course_id: int = Field(foreign_key="courses.id", nullable=False, index=True)
+    course_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("courses.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        ),
+    )
     title: str = Field(nullable=False)
     description: Optional[str] = Field(default=None, sa_column=Column(Text))
     objectives: Optional[str] = Field(
@@ -38,14 +45,18 @@ class Lesson(SQLModel, table=True):
     content: Optional[str] = Field(
         default=None, sa_column=Column(LONGTEXT)
     )  # Markdown content (long text)
-    audios: list["LessonAudio"] = Relationship(back_populates="lesson")
+    audios: list["LessonAudio"] = Relationship(
+        back_populates="lesson",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
     order: int = Field(default=0, nullable=False)  # Order within the module
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default=None)
 
     module: "Module" = Relationship(back_populates="lessons")
     quiz: Optional["Quiz"] = Relationship(
-        sa_relationship_kwargs={"uselist": False}, back_populates="lesson"
+        sa_relationship_kwargs={"uselist": False, "cascade": "all, delete-orphan"},
+        back_populates="lesson",
     )
 
     class Config:
@@ -64,8 +75,8 @@ class LessonAudio(SQLModel, table=True):
         default=None,
         sa_column=Column(
             Integer,
-            ForeignKey("lessons.id", ondelete="SET NULL"),
-            nullable=True,
+            ForeignKey("lessons.id", ondelete="CASCADE"),
+            nullable=False,
             index=True,
         ),
     )

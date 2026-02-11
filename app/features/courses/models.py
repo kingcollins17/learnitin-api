@@ -87,7 +87,10 @@ class Course(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default=None)
 
-    modules: List["Module"] = Relationship(back_populates="course")
+    modules: List["Module"] = Relationship(
+        back_populates="course",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
     category: Optional["Category"] = Relationship(back_populates="courses")
     sub_category: Optional["SubCategory"] = Relationship(back_populates="courses")
 
