@@ -227,9 +227,18 @@ class CourseService(Commitable):
             )
 
         # Emit course enrolled event
+        assert user_course.id
         event_bus.dispatch(CourseEnrolledEvent(user_id=user_id, course_id=course_id))
 
-        return UserCourseResponse.model_validate(user_course)
+        # Reload with details for response (ensures total_modules property works)
+        user_course_with_details = (
+            await self.user_course_repository.get_by_id_with_course(user_course.id)
+        )
+        if not user_course_with_details:
+            # Fallback to the created instance if reload fails (should not happen)
+            return UserCourseResponse.model_validate(user_course)
+
+        return UserCourseResponse.model_validate(user_course_with_details)
 
     def _create_slug(self, text: str) -> str:
         """Create a URL-friendly slug from text."""

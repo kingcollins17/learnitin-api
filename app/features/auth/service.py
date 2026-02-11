@@ -3,7 +3,8 @@
 from datetime import timedelta
 from typing import Optional
 from fastapi import HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
+
+# from sqlalchemy.ext.asyncio import AsyncSession - Removed unused
 from app.common.config import settings
 from app.common.security import create_access_token
 from app.features.users.models import User
@@ -22,11 +23,9 @@ class AuthService(Commitable):
 
     def __init__(
         self,
-        # session: AsyncSession,
         user_service: UserService,
         otp_service: OTPService,
     ):
-        # self.session = session
         self.user_service = user_service
         self.otp_service = otp_service
 
