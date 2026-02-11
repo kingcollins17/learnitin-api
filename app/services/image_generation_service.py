@@ -6,13 +6,14 @@ from typing import Optional
 from google import genai
 from google.genai import types
 
-from app.common.config import settings
+from app.common.config import Settings
 
 
 class ImageGenerationService:
     """Service for generating image content."""
 
-    def __init__(self):
+    def __init__(self, settings: Settings):
+        self.settings = settings
         self.api_key = settings.GEMINI_API_KEY
         if not self.api_key:
             print("Warning: GEMINI_API_KEY not set")
@@ -91,7 +92,3 @@ class ImageGenerationService:
             print(f"Error during generate_content: {e}")
 
         return None
-
-
-# Singleton instance
-image_generation_service = ImageGenerationService()

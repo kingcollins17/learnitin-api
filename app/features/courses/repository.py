@@ -85,6 +85,15 @@ class CourseRepository:
         )
         return list(result.scalars().all())
 
+    async def get_orphaned_courses(self) -> List[Course]:
+        """Get courses that have no creator (user_id is NULL) and are not public."""
+        result = await self.session.execute(
+            select(Course)
+            .where(Course.user_id == None)
+            .where(Course.is_public == False)
+        )
+        return list(result.scalars().all())
+
     async def get_all_with_filters(
         self,
         skip: int = 0,

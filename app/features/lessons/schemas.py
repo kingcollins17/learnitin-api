@@ -10,7 +10,7 @@ class LessonAudioResponse(BaseModel):
     """Schema for lesson audio responses."""
 
     id: int
-    lesson_id: int
+    lesson_id: Optional[int] = None
     title: str
     description: Optional[str] = None
     script: Optional[str] = None

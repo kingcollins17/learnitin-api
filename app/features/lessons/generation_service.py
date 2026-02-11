@@ -1,7 +1,7 @@
 """Service for generating lesson content using AI."""
 
 from typing import Optional
-from app.services.langchain_service import langchain_service
+from app.services.langchain_service import LangChainService
 from app.features.courses.models import Course
 from app.features.modules.models import Module
 from app.features.lessons.models import Lesson
@@ -10,8 +10,8 @@ from app.features.lessons.models import Lesson
 class LessonGenerationService:
     """Service for generating lesson content."""
 
-    def __init__(self):
-        self.ai_service = langchain_service
+    def __init__(self, ai_service: LangChainService):
+        self.ai_service = ai_service
 
     async def generate_lesson_content(
         self, course: Course, module: Module, lesson: Lesson
@@ -59,7 +59,3 @@ needs rather than following a rigid template. Use clear Markdown sections with d
         )
 
         return str(content)
-
-
-# Singleton instance
-lesson_generation_service = LessonGenerationService()

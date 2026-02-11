@@ -20,7 +20,7 @@ class LessonRepository:
         result = await self.session.execute(
             select(Lesson)
             .where(Lesson.id == lesson_id)
-            .options(selectinload(Lesson.audios))
+            .options(selectinload(Lesson.audios))  # ty:ignore[invalid-argument-type]
         )
         return result.scalar_one_or_none()
 
@@ -31,7 +31,7 @@ class LessonRepository:
         result = await self.session.execute(
             select(Lesson)
             .where(Lesson.module_id == module_id)
-            .order_by(Lesson.order)
+            .order_by(Lesson.order)  # ty:ignore[invalid-argument-type]
             .offset(skip)
             .limit(limit)
         )
@@ -45,7 +45,7 @@ class LessonRepository:
             select(Lesson)
             .where(Lesson.module_id == module_id)
             .where(Lesson.order < current_order)
-            .order_by(desc(Lesson.order))
+            .order_by(desc(Lesson.order))  # ty:ignore[invalid-argument-type]
             .limit(1)
         )
         return result.scalar_one_or_none()
@@ -57,7 +57,10 @@ class LessonRepository:
         result = await self.session.execute(
             select(Lesson)
             .where(Lesson.course_id == course_id)
-            .order_by(Lesson.module_id, Lesson.order)
+            .order_by(
+                Lesson.module_id,  # ty:ignore[invalid-argument-type]
+                Lesson.order,  # ty:ignore[invalid-argument-type]
+            )
             .offset(skip)
             .limit(limit)
         )
@@ -86,7 +89,11 @@ class LessonRepository:
         """Get all lessons with pagination."""
         result = await self.session.execute(
             select(Lesson)
-            .order_by(Lesson.course_id, Lesson.module_id, Lesson.order)
+            .order_by(
+                Lesson.course_id,  # ty:ignore[invalid-argument-type]
+                Lesson.module_id,  # ty:ignore[invalid-argument-type]
+                Lesson.order,  # ty:ignore[invalid-argument-type]
+            )
             .offset(skip)
             .limit(limit)
         )
@@ -179,7 +186,7 @@ class LessonAudioRepository:
         result = await self.session.execute(
             select(LessonAudio)
             .where(LessonAudio.lesson_id == lesson_id)
-            .order_by(LessonAudio.order)
+            .order_by(LessonAudio.order)  # ty:ignore[invalid-argument-type]
             .offset(skip)
             .limit(limit)
         )
@@ -189,9 +196,19 @@ class LessonAudioRepository:
         """Get all lesson audios with pagination."""
         result = await self.session.execute(
             select(LessonAudio)
-            .order_by(LessonAudio.lesson_id, LessonAudio.order)
+            .order_by(
+                LessonAudio.lesson_id,  # ty:ignore[invalid-argument-type]
+                LessonAudio.order,  # ty:ignore[invalid-argument-type]
+            )
             .offset(skip)
             .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def get_orphaned_audios(self) -> List[LessonAudio]:
+        """Get all lesson audios that are not linked to any lesson (lesson_id is NULL)."""
+        result = await self.session.execute(
+            select(LessonAudio).where(LessonAudio.lesson_id == None)
         )
         return list(result.scalars().all())
 

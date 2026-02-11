@@ -6,20 +6,27 @@ from typing import Optional, Literal
 
 from app.features.auth.otp_models import OTP
 from app.features.auth.otp_repository import OTPRepository
-from app.services.email_service import email_service
+from app.services.email_service import EmailService
 
 
 logger = logging.getLogger(__name__)
+
+from app.common.service import Commitable
 
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
-class OTPService:
+class OTPService(Commitable):
     """Service for OTP operations."""
 
-    def __init__(self, repository: OTPRepository):
+    def __init__(self, repository: OTPRepository, email_service: EmailService):
         self.otp_repository = repository
+        self.email_service = email_service
+
+    async def commit_all(self) -> None:
+        """Commit all active sessions in the service's repositories."""
+        await self.otp_repository.session.commit()
 
     async def request_otp(self, email: str) -> OTP:
         """Generate and send an OTP code."""
@@ -41,7 +48,7 @@ class OTPService:
 
         # Send email
         try:
-            email_sent = email_service.send_email(
+            email_sent = self.email_service.send_email(
                 to_email=email,
                 subject="Your Verification Code",
                 template_name="otp_verification.html",
@@ -83,7 +90,7 @@ class OTPService:
         try:
             magic_link = f"https://www.learnitin.online/app/reset-password?email={email}&otp={code}"
 
-            email_sent = email_service.send_email(
+            email_sent = self.email_service.send_email(
                 to_email=email,
                 subject="Reset Your Password",
                 template_name="magic_link_password_reset.html",
@@ -144,7 +151,7 @@ class OTPService:
                 f"https://www.learnitin.online/app/{path}?email={email}&otp={code}"
             )
 
-            email_sent = email_service.send_email(
+            email_sent = self.email_service.send_email(
                 to_email=email,
                 subject=subject,
                 template_name=template,

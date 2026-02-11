@@ -8,13 +8,18 @@ from app.features.users.models import User
 from app.features.users.schemas import UserCreate, UserUpdate
 from app.features.users.repository import UserRepository
 from app.common.security import get_password_hash, verify_password
+from app.common.service import Commitable
 
 
-class UserService:
+class UserService(Commitable):
     """Service for user business logic."""
 
     def __init__(self, repository: UserRepository):
         self.repository = repository
+
+    async def commit_all(self) -> None:
+        """Commit all active sessions in the service's repositories."""
+        await self.repository.session.commit()
 
     async def create_user(self, user_data: UserCreate) -> User:
         """Create a new user with hashed password."""

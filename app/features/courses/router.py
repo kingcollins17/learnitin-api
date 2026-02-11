@@ -13,6 +13,7 @@ from app.common.dependencies import (
     get_category_service,
     get_subcategory_service,
     get_course_generation_service,
+    run_db_maintenance_in_bg,
 )
 from app.features.subscriptions.dependencies import (
     ResourceAccessControl,
@@ -239,7 +240,7 @@ async def publish_course(
         # Generate image in background if it's missing
         if not updated_course.image_url:
             background_tasks.add_task(
-                generate_course_image_background, course_id, service.session
+                generate_course_image_background, course_id, service
             )
 
         return success_response(
@@ -662,6 +663,7 @@ async def get_courses(
     min_enrollees: int | None = Query(None, ge=0, description="Minimum enrollees"),
     search: str | None = Query(None, description="Search for a course by title"),
     service: CourseService = Depends(get_course_service),
+    _maintenance: None = Depends(run_db_maintenance_in_bg),
 ):
     """
     Get all courses with pagination and optional filters.
@@ -711,6 +713,7 @@ async def get_course_detail(
     background_tasks: BackgroundTasks,
     service: CourseService = Depends(get_course_service),
     current_user: User | None = Depends(get_current_active_user_optional),
+    _maintenance: None = Depends(run_db_maintenance_in_bg),
 ):
     """
     Get course detail with all modules and lessons.
@@ -742,7 +745,7 @@ async def get_course_detail(
         # Generate image in background if it's missing
         if not course.image_url:
             background_tasks.add_task(
-                generate_course_image_background, course_id, service.session
+                generate_course_image_background, course_id, service
             )
 
         return success_response(

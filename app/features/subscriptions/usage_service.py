@@ -4,22 +4,27 @@ from typing import Optional
 from .models import Subscription, SubscriptionResourceType
 from .usage_repository import SubscriptionUsageRepository
 from .service import SubscriptionService
+from app.common.service import Commitable
 
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
-class SubscriptionUsageService:
+class SubscriptionUsageService(Commitable):
     """Service for managing and tracking subscription usage."""
 
     def __init__(
         self,
-        session: AsyncSession,
         repository: SubscriptionUsageRepository,
         subscription_service: SubscriptionService,
     ):
         self.repository = repository
         self.subscription_service = subscription_service
+
+    async def commit_all(self) -> None:
+        """Commit all active sessions in the service's repositories."""
+        await self.repository.session.commit()
+        await self.subscription_service.commit_all()
 
     async def increment_usage(
         self,

@@ -3,14 +3,15 @@ import os
 from typing import Any, Dict, List, Optional, Union
 
 import resend
-from app.common.config import settings
+from app.common.config import Settings
 from app.common.email import render_template
 
 logger = logging.getLogger(__name__)
 
 
 class EmailService:
-    def __init__(self):
+    def __init__(self, settings: Settings):
+        self.settings = settings
         self.api_key = settings.RESEND_API_KEY
         if self.api_key:
             resend.api_key = self.api_key
@@ -53,7 +54,7 @@ class EmailService:
             # Prepare parameters
             # Resend expects 'to' to be a list of strings or a single string
             params = {
-                "from": settings.EMAIL_FROM,
+                "from": self.settings.EMAIL_FROM,
                 "to": to_email,
                 "subject": subject,
                 "html": html_content,
@@ -79,7 +80,3 @@ class EmailService:
         except Exception as e:
             logger.error(f"Unexpected error sending email: {e}")
             return False
-
-
-# Global instance
-email_service = EmailService()

@@ -9,13 +9,14 @@ import datetime
 import firebase_admin
 from firebase_admin import credentials, storage
 
-from app.common.config import settings
+from app.common.config import Settings
 
 
 class FirebaseStorageService:
     """Service for interacting with Firebase Storage."""
 
-    def __init__(self):
+    def __init__(self, settings: Settings):
+        self.settings = settings
         self.bucket_name = settings.FIREBASE_STORAGE_BUCKET
         self._initialize_app()
 
@@ -25,14 +26,14 @@ class FirebaseStorageService:
             options = {"storageBucket": self.bucket_name} if self.bucket_name else {}
 
             # If explicit credentials provided in settings, use them
-            if settings.FIREBASE_CREDENTIALS_JSON:
+            if self.settings.FIREBASE_CREDENTIALS_JSON:
                 try:
-                    if os.path.exists(settings.FIREBASE_CREDENTIALS_JSON):
+                    if os.path.exists(self.settings.FIREBASE_CREDENTIALS_JSON):
                         cred = credentials.Certificate(
-                            settings.FIREBASE_CREDENTIALS_JSON
+                            self.settings.FIREBASE_CREDENTIALS_JSON
                         )
                     else:
-                        cred_info = json.loads(settings.FIREBASE_CREDENTIALS_JSON)
+                        cred_info = json.loads(self.settings.FIREBASE_CREDENTIALS_JSON)
                         cred = credentials.Certificate(cred_info)
 
                     firebase_admin.initialize_app(cred, options)
@@ -130,6 +131,44 @@ class FirebaseStorageService:
 
         return self.upload_bytes(audio_data, destination, content_type)
 
+    def delete_file(self, file_url: str) -> bool:
+        """
+        Deletes a file from Firebase Storage given its public URL.
 
-# Singleton instance
-firebase_storage_service = FirebaseStorageService()
+        Args:
+            file_url: The public URL of the file.
+
+        Returns:
+            True if deleted, False otherwise.
+        """
+        try:
+            # Extract path from URL (e.g. https://storage.googleapis.com/bucket/folder/file.mp3)
+            # Public URL format is usually: https://storage.googleapis.com/{bucket}/{path}
+            # Or: https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{path}?alt=media
+
+            bucket = storage.bucket()
+
+            # Simple path extraction for storage.googleapis.com URLs
+            if "storage.googleapis.com" in file_url:
+                path = file_url.split(f"{self.bucket_name}/")[-1]
+            # Extraction for firebasestorage.googleapis.com URLs
+            elif "firebasestorage.googleapis.com" in file_url:
+                path = file_url.split("/o/")[-1].split("?")[0]
+                import urllib.parse
+
+                path = urllib.parse.unquote(path)
+            else:
+                # Fallback: try to see if it's just a path
+                path = file_url
+
+            blob = bucket.blob(path)
+            if blob.exists():
+                blob.delete()
+                print(f"Successfully deleted {path} from storage.")
+                return True
+            else:
+                print(f"File {path} does not exist in storage.")
+                return False
+        except Exception as e:
+            print(f"Error deleting file from storage: {e}")
+            return False

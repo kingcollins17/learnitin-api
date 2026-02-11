@@ -3,12 +3,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.features.courses.service import CourseService
 
 
-async def generate_course_image_background(course_id: int, session: AsyncSession):
+async def generate_course_image_background(
+    course_id: int, course_service: CourseService
+):
     """
     Background task to generate an image for a course.
     """
     try:
-        course_service = CourseService(session)
         # Fetch course to check if image already exists
         course = await course_service.repository.get_by_id(course_id)
 

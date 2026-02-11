@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from typing import Optional, List, TYPE_CHECKING
 from sqlmodel import Field, SQLModel, Relationship
-from sqlalchemy import Column, Text
+from sqlalchemy import Column, Text, ForeignKey, Integer
 
 if TYPE_CHECKING:
     from app.features.lessons.models import Lesson
@@ -16,7 +16,13 @@ class Quiz(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     lesson_id: int = Field(
-        foreign_key="lessons.id", nullable=False, index=True, unique=True
+        sa_column=Column(
+            Integer,
+            ForeignKey("lessons.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+            unique=True,
+        )
     )
     duration: Optional[int] = Field(default=None)  # Duration in seconds, nullable
     passing_score: float = Field(default=0.7)  # Passing score ratio (0.0 - 1.0)
@@ -41,8 +47,22 @@ class Question(SQLModel, table=True):
     __tablename__ = "questions"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    quiz_id: int = Field(foreign_key="quizzes.id", nullable=False, index=True)
-    lesson_id: int = Field(foreign_key="lessons.id", nullable=False, index=True)
+    quiz_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("quizzes.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        )
+    )
+    lesson_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("lessons.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        )
+    )
     question: str = Field(sa_column=Column(Text, nullable=False))
     option_1: Optional[str] = Field(default=None, sa_column=Column(Text))
     option_2: Optional[str] = Field(default=None, sa_column=Column(Text))

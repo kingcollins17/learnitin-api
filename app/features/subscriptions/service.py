@@ -9,25 +9,30 @@ from .google_play_service import GooglePlayService
 from .schemas import SubscriptionVerifyRequest
 
 # Dispatch notification event
+from app.common.service import Commitable
 from app.common.events import event_bus, NotificationInAppPushEvent, InAppEventType
 
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
-class SubscriptionService:
+class SubscriptionService(Commitable):
     """Service for managing subscriptions."""
 
     def __init__(
         self,
-        session: AsyncSession,
-        repository: SubscriptionRepository,
+        subscription_repository: SubscriptionRepository,
         usage_repository: SubscriptionUsageRepository,
         google_play: GooglePlayService,
     ):
-        self.repository = repository
+        self.subscription_repository = subscription_repository
         self.usage_repository = usage_repository
         self.google_play = google_play
+
+    async def commit_all(self) -> None:
+        """Commit all active sessions in the service's repositories."""
+        await self.subscription_repository.session.commit()
+        await self.usage_repository.session.commit()
 
     # ========== Private Helpers (DRY) ==========
 
@@ -58,7 +63,7 @@ class SubscriptionService:
         self, purchase_token: str
     ) -> Optional[Subscription]:
         """Get subscription by token or return None."""
-        return await self.repository.get_by_purchase_token(purchase_token)
+        return await self.subscription_repository.get_by_purchase_token(purchase_token)
 
     async def _init_usage_tracking(self, subscription_id: int) -> None:
         """Initialize or refresh usage tracking for new period."""
@@ -78,9 +83,9 @@ class SubscriptionService:
     ) -> Subscription:
         """Shared logic for saving a subscription, tracking usage, and notifying user."""
         if is_new:
-            sub = await self.repository.create(sub)
+            sub = await self.subscription_repository.create(sub)
         else:
-            sub = await self.repository.update(sub)
+            sub = await self.subscription_repository.update(sub)
 
         if sub.id:
             await self._init_usage_tracking(sub.id)
@@ -111,7 +116,7 @@ class SubscriptionService:
         sub.status = status
         if auto_renew is not None:
             sub.auto_renew = auto_renew
-        return await self.repository.update(sub)
+        return await self.subscription_repository.update(sub)
 
     # ========== Public API Methods ==========
 
@@ -123,14 +128,14 @@ class SubscriptionService:
 
     async def get_active_subscription(self, user_id: int) -> Optional[Subscription]:
         """Get user's current valid subscription."""
-        sub = await self.repository.get_active_by_user_id(user_id)
+        sub = await self.subscription_repository.get_active_by_user_id(user_id)
         if sub and sub.expiry_time > datetime.now(timezone.utc).replace(tzinfo=None):
             return sub
         return None
 
     async def create_free_subscription(self, user_id: int) -> Subscription:
         """Deactivate old plans and start a fresh free plan."""
-        await self.repository.deactivate_all_for_user(user_id)
+        await self.subscription_repository.deactivate_all_for_user(user_id)
         expiry = (datetime.now(timezone.utc) + timedelta(days=30)).replace(tzinfo=None)
 
         sub = Subscription(
@@ -175,7 +180,7 @@ class SubscriptionService:
                 in_app_event=InAppEventType.SUBSCRIPTION_PURCHASED,
             )
 
-        await self.repository.deactivate_all_for_user(user_id)
+        await self.subscription_repository.deactivate_all_for_user(user_id)
         new_sub = Subscription(
             user_id=user_id,
             product_id=request.product_id,
@@ -202,7 +207,7 @@ class SubscriptionService:
         )
         sub.expiry_time, sub.auto_renew = self._parse_google_response(google_resp)
         sub.status = SubscriptionStatus.ACTIVE
-        return await self.repository.update(sub)
+        return await self.subscription_repository.update(sub)
 
     # ========== Webhook Processing Methods ==========
 
@@ -223,9 +228,9 @@ class SubscriptionService:
         if existing.status == SubscriptionStatus.ACTIVE:
             existing.expiry_time, existing.auto_renew = expiry, auto_renew
             existing.product_id = product_id
-            return await self.repository.update(existing)
+            return await self.subscription_repository.update(existing)
 
-        await self.repository.deactivate_all_for_user(existing.user_id)
+        await self.subscription_repository.deactivate_all_for_user(existing.user_id)
         new_sub = Subscription(
             user_id=existing.user_id,
             product_id=product_id,
@@ -252,7 +257,7 @@ class SubscriptionService:
         )
         expiry, auto_renew = self._parse_google_response(google_resp)
 
-        await self.repository.deactivate_all_for_user(existing.user_id)
+        await self.subscription_repository.deactivate_all_for_user(existing.user_id)
         new_sub = Subscription(
             user_id=existing.user_id,
             product_id=existing.product_id,
@@ -299,5 +304,5 @@ class SubscriptionService:
         sub = await self.sync_with_google(purchase_token)
         if sub:
             sub.auto_renew = True
-            return await self.repository.update(sub)
+            return await self.subscription_repository.update(sub)
         return None

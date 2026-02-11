@@ -11,30 +11,55 @@ from app.features.lessons.repository import (
 )
 from app.features.lessons.models import Lesson, UserLesson, LessonAudio
 from app.features.courses.models import ProgressStatus
-from app.features.lessons.generation_service import lesson_generation_service
+from app.features.lessons.generation_service import LessonGenerationService
 from app.features.modules.repository import ModuleRepository, UserModuleRepository
 from app.features.modules.service import UserModuleService
 from app.features.courses.repository import CourseRepository, UserCourseRepository
-from app.features.lessons.lecture_service import lecture_conversion_service
-from app.services.audio_generation_service import audio_generation_service
-from app.services.storage_service import firebase_storage_service
+from app.features.lessons.lecture_service import LectureConversionService
+from app.services.audio_generation_service import AudioGenerationService
+from app.services.storage_service import FirebaseStorageService
 from app.features.subscriptions.models import Subscription, SubscriptionResourceType
 from app.features.subscriptions.usage_service import SubscriptionUsageService
-from app.services.audio_conversion_service import validate_audio_bytes
+from app.services.audio_conversion_service import AudioConversionService
 from app.features.lessons.schemas import CompleteLessonResult
+from app.features.lessons.schemas import UserLessonResponse
+from app.common.service import Commitable
 
 
-class LessonService:
+class LessonService(Commitable):
     """Service for lesson business logic."""
 
-    def __init__(self, session: AsyncSession):
-        self.session = session
-        self.repository = LessonRepository(session)
-        self.audio_repo = LessonAudioRepository(session)
-        self.user_lesson_repo = UserLessonRepository(session)
-        self.course_repo = CourseRepository(session)
-        self.module_repo = ModuleRepository(session)
-        self.generation_service = lesson_generation_service
+    def __init__(
+        self,
+        lesson_repository: LessonRepository,
+        lesson_audio_repository: LessonAudioRepository,
+        user_lesson_repository: UserLessonRepository,
+        course_repository: CourseRepository,
+        module_repository: ModuleRepository,
+        generation_service: LessonGenerationService,
+        lecture_service: LectureConversionService,
+        audio_gen_service: AudioGenerationService,
+        storage_service: FirebaseStorageService,
+        audio_conversion_service: AudioConversionService,
+    ):
+        self.repository = lesson_repository
+        self.audio_repo = lesson_audio_repository
+        self.user_lesson_repo = user_lesson_repository
+        self.course_repo = course_repository
+        self.module_repo = module_repository
+        self.generation_service = generation_service
+        self.lecture_service = lecture_service
+        self.audio_gen_service = audio_gen_service
+        self.storage_service = storage_service
+        self.audio_conversion_service = audio_conversion_service
+
+    async def commit_all(self) -> None:
+        """Commit all active sessions in the service's repositories."""
+        await self.repository.session.commit()
+        await self.audio_repo.session.commit()
+        await self.user_lesson_repo.session.commit()
+        await self.course_repo.session.commit()
+        await self.module_repo.session.commit()
 
     async def get_lesson_audios(
         self, user_id: int, lesson_id: int
@@ -122,7 +147,7 @@ class LessonService:
             return []
 
         # Generate lecture script parts
-        lecture_parts = await lecture_conversion_service.generate_lecture_parts(
+        lecture_parts = await self.lecture_service.generate_lecture_parts(
             lesson.content,
             max_parts=4,
         )
@@ -134,18 +159,18 @@ class LessonService:
 
         for part in lecture_parts:
             try:
-                audio_bytes = await audio_generation_service.generate_audio_mp3(
+                audio_bytes = await self.audio_gen_service.generate_audio_mp3(
                     text=part.script, sample_rate=24000, bitrate="128k"
                 )
 
                 # Validate audio bytes before uploading
-                if not validate_audio_bytes(audio_bytes):
+                if not self.audio_conversion_service.validate_audio_bytes(audio_bytes):
                     raise ValueError(
                         f"Generated audio for part {part.order} ('{part.title}') is invalid, empty or corrupted."
                     )
 
                 # Upload to Firebase with descriptive folder structure
-                audio_url = firebase_storage_service.upload_audio(
+                audio_url = self.storage_service.upload_audio(
                     audio_data=audio_bytes,
                     folder=f"lesson_audio/{lesson_id}",
                 )
@@ -160,7 +185,7 @@ class LessonService:
                 )
 
                 created_audio = await self.audio_repo.create(lesson_audio)
-                await self.session.commit()
+                await self.audio_repo.session.commit()
                 created_audios.append(created_audio)
 
                 print(
@@ -320,16 +345,22 @@ class LessonService:
         await self.repository.delete(lesson)
 
 
-class UserLessonService:
+class UserLessonService(Commitable):
     """Service for user lesson business logic."""
 
-    def __init__(self, session: AsyncSession):
-        self.session = session
-        self.repository = UserLessonRepository(session)
-        self.lesson_repo = LessonRepository(session)
-        self.user_course_repo = UserCourseRepository(session)
-        self.user_module_repo = UserModuleRepository(session)
-        self.user_module_service = UserModuleService(session)
+    def __init__(
+        self,
+        user_lesson_repository: UserLessonRepository,
+        lesson_repository: LessonRepository,
+        user_course_repository: UserCourseRepository,
+        user_module_repository: UserModuleRepository,
+        user_module_service: UserModuleService,
+    ):
+        self.user_lesson_repo = user_lesson_repository
+        self.lesson_repo = lesson_repository
+        self.user_course_repo = user_course_repository
+        self.user_module_repo = user_module_repository
+        self.user_module_service = user_module_service
 
     async def start_lesson(
         self,
@@ -356,13 +387,15 @@ class UserLessonService:
             HTTPException: If user lesson already exists
         """
         # Check if already started
-        existing = await self.repository.get_by_user_and_lesson(user_id, lesson_id)
+        existing = await self.user_lesson_repo.get_by_user_and_lesson(
+            user_id, lesson_id
+        )
 
         if existing:
             if not existing.is_lesson_unlocked:
                 existing.is_lesson_unlocked = True
                 existing.updated_at = datetime.now(timezone.utc)
-                await self.repository.update(existing)
+                await self.user_lesson_repo.update(existing)
             return existing
 
         # Check and start module if needed
@@ -391,7 +424,7 @@ class UserLessonService:
 
         if previous_lesson:
             assert previous_lesson.id is not None
-            user_previous_lesson = await self.repository.get_by_user_and_lesson(
+            user_previous_lesson = await self.user_lesson_repo.get_by_user_and_lesson(
                 user_id=user_id,
                 lesson_id=previous_lesson.id,
             )
@@ -414,7 +447,7 @@ class UserLessonService:
             is_lesson_unlocked=True,  # Auto-unlock on start
         )
 
-        created_user_lesson = await self.repository.create(user_lesson)
+        created_user_lesson = await self.user_lesson_repo.create(user_lesson)
 
         # Update UserCourse progress
         user_course = await self.user_course_repo.get_by_user_and_course(
@@ -438,7 +471,7 @@ class UserLessonService:
         self, user_id: int, lesson_id: int
     ) -> Optional[UserLesson]:
         """Get user lesson record without raising exception."""
-        return await self.repository.get_by_user_and_lesson(user_id, lesson_id)
+        return await self.user_lesson_repo.get_by_user_and_lesson(user_id, lesson_id)
 
     async def is_user_enrolled(self, user_id: int, course_id: int) -> bool:
         """Check if user is enrolled in a course."""
@@ -460,7 +493,7 @@ class UserLessonService:
         Returns:
             List of user lessons for the module
         """
-        return await self.repository.get_by_user_and_module(user_id, module_id)
+        return await self.user_lesson_repo.get_by_user_and_module(user_id, module_id)
 
     async def get_user_lessons_by_course(
         self, user_id: int, course_id: int
@@ -475,7 +508,7 @@ class UserLessonService:
         Returns:
             List of user lessons for the course
         """
-        return await self.repository.get_by_user_and_course(user_id, course_id)
+        return await self.user_lesson_repo.get_by_user_and_course(user_id, course_id)
 
     async def get_user_lesson(
         self, user_id: int, lesson_id: int
@@ -493,7 +526,9 @@ class UserLessonService:
         Raises:
             HTTPException: If user lesson not found
         """
-        user_lesson = await self.repository.get_by_user_and_lesson(user_id, lesson_id)
+        user_lesson = await self.user_lesson_repo.get_by_user_and_lesson(
+            user_id, lesson_id
+        )
 
         if not user_lesson:
             raise HTTPException(
@@ -520,7 +555,9 @@ class UserLessonService:
         Raises:
             HTTPException: If user lesson not found
         """
-        user_lesson = await self.repository.get_by_user_and_lesson(user_id, lesson_id)
+        user_lesson = await self.user_lesson_repo.get_by_user_and_lesson(
+            user_id, lesson_id
+        )
 
         if not user_lesson:
             raise HTTPException(
@@ -536,7 +573,7 @@ class UserLessonService:
         # Update timestamp
         user_lesson.updated_at = datetime.now(timezone.utc)
 
-        return await self.repository.update(user_lesson)
+        return await self.user_lesson_repo.update(user_lesson)
 
     async def unlock_lesson(self, user_id: int, lesson_id: int) -> UserLesson:
         """
@@ -646,7 +683,14 @@ class UserLessonService:
         )
 
         return CompleteLessonResult(
-            user_lesson=user_lesson,
+            user_lesson=UserLessonResponse.model_validate(user_lesson),
             has_completed_module=has_completed_module,
             has_completed_course=has_completed_course,
         )
+
+    async def commit_all(self) -> None:
+        """Commit all active sessions in the service's repositories."""
+        await self.user_lesson_repo.session.commit()
+        await self.lesson_repo.session.commit()
+        await self.user_course_repo.session.commit()
+        await self.user_module_repo.session.commit()

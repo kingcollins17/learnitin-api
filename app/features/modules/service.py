@@ -9,14 +9,18 @@ from app.features.modules.models import Module, UserModule
 from app.features.courses.models import ProgressStatus
 from app.features.courses.repository import UserCourseRepository
 from app.features.lessons.repository import LessonRepository, UserLessonRepository
+from app.common.service import Commitable
 
 
-class ModuleService:
+class ModuleService(Commitable):
     """Service for module business logic."""
 
-    def __init__(self, session: AsyncSession):
-        self.session = session
-        self.repository = ModuleRepository(session)
+    def __init__(self, module_repository: ModuleRepository):
+        self.repository = module_repository
+
+    async def commit_all(self) -> None:
+        """Commit all active sessions in the service's repositories."""
+        await self.repository.session.commit()
 
     async def get_modules_by_course(
         self, course_id: int, page: int = 1, per_page: int = 100
@@ -115,16 +119,30 @@ class ModuleService:
         await self.repository.delete(module)
 
 
-class UserModuleService:
+class UserModuleService(Commitable):
     """Service for user module business logic."""
 
-    def __init__(self, session: AsyncSession):
-        self.session = session
-        self.repository = UserModuleRepository(session)
-        self.module_repo = ModuleRepository(session)
-        self.user_course_repo = UserCourseRepository(session)
-        self.lesson_repo = LessonRepository(session)
-        self.user_lesson_repo = UserLessonRepository(session)
+    def __init__(
+        self,
+        user_module_repository: UserModuleRepository,
+        module_repository: ModuleRepository,
+        user_course_repository: UserCourseRepository,
+        lesson_repository: LessonRepository,
+        user_lesson_repository: UserLessonRepository,
+    ):
+        self.repository = user_module_repository
+        self.module_repo = module_repository
+        self.user_course_repo = user_course_repository
+        self.lesson_repo = lesson_repository
+        self.user_lesson_repo = user_lesson_repository
+
+    async def commit_all(self) -> None:
+        """Commit all active sessions in the service's repositories."""
+        await self.repository.session.commit()
+        await self.module_repo.session.commit()
+        await self.user_course_repo.session.commit()
+        await self.lesson_repo.session.commit()
+        await self.user_lesson_repo.session.commit()
 
     async def check_and_complete_module(self, user_id: int, module_id: int) -> bool:
         """

@@ -14,20 +14,26 @@ import string
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from app.features.auth.otp_service import OTPService
+from app.common.service import Commitable
 
 
-class AuthService:
+class AuthService(Commitable):
     """Service for authentication logic."""
 
     def __init__(
         self,
-        session: AsyncSession,
+        # session: AsyncSession,
         user_service: UserService,
         otp_service: OTPService,
     ):
-        self.session = session
+        # self.session = session
         self.user_service = user_service
         self.otp_service = otp_service
+
+    async def commit_all(self) -> None:
+        """Commit all active sessions in the service's sub-services."""
+        await self.user_service.commit_all()
+        await self.otp_service.commit_all()
 
     async def register_user(self, user_data: UserCreate) -> User:
         """
@@ -196,7 +202,7 @@ class AuthService:
         if not user.is_active:
             user.is_active = True
             await self.user_service.repository.update(user)
-            await self.session.commit()
+            await self.user_service.repository.session.commit()
 
         return self.generate_token_response(user)
 
@@ -213,7 +219,7 @@ class AuthService:
         user = await self.user_service.activate_user(email)
 
         # 3. Commit the changes
-        await self.session.commit()
+        await self.user_service.repository.session.commit()
 
         return user
 

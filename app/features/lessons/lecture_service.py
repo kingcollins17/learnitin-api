@@ -2,7 +2,7 @@
 
 from typing import List
 from pydantic import BaseModel
-from app.services.langchain_service import langchain_service
+from app.services.langchain_service import LangChainService
 
 
 class LectureScriptPart(BaseModel):
@@ -16,8 +16,11 @@ class LectureScriptPart(BaseModel):
 class LectureConversionService:
     """Service for converting lesson content into a lecture script."""
 
-    def __init__(self):
-        self.ai_service = langchain_service
+    def __init__(
+        self, ai_service: LangChainService, breakdown_service: "LectureBreakdownService"
+    ):
+        self.ai_service = ai_service
+        self.breakdown_service = breakdown_service
 
     async def convert_to_lecture(self, lesson_content: str) -> str:
         """
@@ -98,7 +101,7 @@ Remember: The total output must not exceed 1200 words.
         full_script = await self.convert_to_lecture(lesson_content)
 
         # Step 2: Break down into TTS-compatible parts
-        parts = await lecture_breakdown_service.breakdown_script(
+        parts = await self.breakdown_service.breakdown_script(
             full_script, max_parts=max_parts
         )
 
@@ -119,8 +122,8 @@ class LectureBreakdownService:
     # Maximum words per part to stay within TTS limits
     MAX_WORDS_PER_PART = 450
 
-    def __init__(self):
-        self.ai_service = langchain_service
+    def __init__(self, ai_service: LangChainService):
+        self.ai_service = ai_service
 
     async def breakdown_script(
         self, lecture_script: str, max_parts: int = 10
@@ -272,8 +275,3 @@ Rules:
             )
 
         return parts
-
-
-# Singleton instances
-lecture_conversion_service = LectureConversionService()
-lecture_breakdown_service = LectureBreakdownService()

@@ -5,11 +5,11 @@ from typing import Optional
 from sqlmodel import Field, SQLModel, Column, Relationship
 from typing import TYPE_CHECKING, Optional
 
-if TYPE_CHECKING:
-    from app.features.modules.models import Module
-    from app.features.quiz.models import Quiz
 
-from sqlalchemy import Text, UniqueConstraint
+from app.features.modules.models import Module
+from app.features.quiz.models import Quiz
+
+from sqlalchemy import Text, UniqueConstraint, ForeignKey, Integer
 from sqlalchemy.dialects.mysql import LONGTEXT
 from app.features.courses.models import ProgressStatus
 
@@ -20,7 +20,15 @@ class Lesson(SQLModel, table=True):
     __tablename__ = "lessons"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    module_id: int = Field(foreign_key="modules.id", nullable=False, index=True)
+    module_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("modules.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        ),
+    )
+
     course_id: int = Field(foreign_key="courses.id", nullable=False, index=True)
     title: str = Field(nullable=False)
     description: Optional[str] = Field(default=None, sa_column=Column(Text))
@@ -52,7 +60,15 @@ class LessonAudio(SQLModel, table=True):
     __tablename__ = "lesson_audios"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    lesson_id: int = Field(foreign_key="lessons.id", nullable=False, index=True)
+    lesson_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            Integer,
+            ForeignKey("lessons.id", ondelete="SET NULL"),
+            nullable=True,
+            index=True,
+        ),
+    )
     title: str = Field(nullable=False)
     description: Optional[str] = Field(default=None, sa_column=Column(Text))
     script: Optional[str] = Field(default=None, sa_column=Column(LONGTEXT))
@@ -61,7 +77,7 @@ class LessonAudio(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default=None)
 
-    lesson: "Lesson" = Relationship(back_populates="audios")
+    lesson: Optional["Lesson"] = Relationship(back_populates="audios")
 
     class Config:
         """Pydantic config."""
@@ -78,10 +94,38 @@ class UserLesson(SQLModel, table=True):
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="users.id", nullable=False, index=True)
-    course_id: int = Field(foreign_key="courses.id", nullable=False, index=True)
-    module_id: int = Field(foreign_key="modules.id", nullable=False, index=True)
-    lesson_id: int = Field(foreign_key="lessons.id", nullable=False, index=True)
+    user_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("users.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        ),
+    )
+    course_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("courses.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        ),
+    )
+    module_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("modules.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        ),
+    )
+    lesson_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("lessons.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        ),
+    )
     is_lesson_unlocked: bool = Field(default=False)
     is_audio_unlocked: bool = Field(default=False)
     is_quiz_completed: bool = Field(default=False)

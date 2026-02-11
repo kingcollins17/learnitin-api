@@ -4,7 +4,7 @@ import logging
 from typing import Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.features.users.repository import UserRepository
-from app.services.fcm_service import firebase_fcm_service
+from app.common.dependencies import get_fcm_service
 from app.features.notifications.models import Notification
 
 logger = logging.getLogger(__name__)
@@ -48,7 +48,8 @@ async def send_push_notification_task(
         fcm_data["click_action"] = "FLUTTER_NOTIFICATION_CLICK"
 
         print(f"Sending push notification to user {user_id}")
-        response = firebase_fcm_service.send_to_token(
+        fcm_service = get_fcm_service()
+        response = fcm_service.send_to_token(
             token=user.device_reg_token, title=title, body=body, data=fcm_data
         )
 

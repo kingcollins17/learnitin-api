@@ -5,7 +5,7 @@ from typing import Optional
 from enum import Enum
 from enum import Enum
 from sqlmodel import Field, SQLModel, Relationship, Column
-from sqlalchemy import Text, UniqueConstraint
+from sqlalchemy import Text, UniqueConstraint, ForeignKey, Integer
 from typing import List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -67,10 +67,13 @@ class Course(SQLModel, table=True):
     sub_category_id: Optional[int] = Field(
         default=None, foreign_key="sub_categories.id"
     )
-    user_id: int = Field(
-        foreign_key="users.id",
-        nullable=False,
-        index=True,
+    user_id: Optional[int] = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("users.id", ondelete="SET NULL"),
+            nullable=True,
+            index=True,
+        ),
         description="User ID of the creator",
     )
     title: str = Field(nullable=False)
@@ -110,14 +113,24 @@ class UserCourse(SQLModel, table=True):
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="users.id", nullable=False, index=True)
-    course_id: int = Field(foreign_key="courses.id", nullable=False, index=True)
-    current_module_id: Optional[int] = Field(
-        default=None, foreign_key="modules.id", index=True
+    user_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("users.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        ),
     )
-    current_lesson_id: Optional[int] = Field(
-        default=None, foreign_key="lessons.id", index=True
+    course_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("courses.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        ),
     )
+    current_module_id: Optional[int] = Field(default=None, nullable=True)
+    current_lesson_id: Optional[int] = Field(default=None, nullable=True)
     completed_modules: int = Field(default=0)
     status: ProgressStatus = Field(default=ProgressStatus.IN_PROGRESS)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

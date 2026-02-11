@@ -8,7 +8,7 @@ from app.common.database.session import get_async_session
 from app.common.responses import ApiResponse, success_response
 from app.features.auth.otp_service import OTPService
 from app.features.users.schemas import UserCreate, UserResponse
-from app.services.email_service import email_service
+
 from app.features.auth.schemas import (
     Token,
     GoogleLoginRequest,
@@ -273,7 +273,7 @@ async def reset_password(
         # 2. Reset Password
         await service.reset_password(data.email, data.new_password)
 
-        await service.session.commit()
+        await service.user_service.repository.session.commit()
 
         return success_response(
             data=True,

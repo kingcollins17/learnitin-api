@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any, List
 import firebase_admin
 from firebase_admin import credentials, messaging
 
-from app.common.config import settings
+from app.common.config import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -16,27 +16,28 @@ logger = logging.getLogger(__name__)
 class FirebaseFCMService:
     """Service for interacting with Firebase Cloud Messaging."""
 
-    def __init__(self):
+    def __init__(self, settings: Settings):
+        self.settings = settings
         self._initialize_app()
 
     def _initialize_app(self):
         """Initialize Firebase Admin SDK if not already initialized."""
         if not firebase_admin._apps:
             options = (
-                {"storageBucket": settings.FIREBASE_STORAGE_BUCKET}
-                if settings.FIREBASE_STORAGE_BUCKET
+                {"storageBucket": self.settings.FIREBASE_STORAGE_BUCKET}
+                if self.settings.FIREBASE_STORAGE_BUCKET
                 else {}
             )
 
             # If explicit credentials provided in settings, use them
-            if settings.FIREBASE_CREDENTIALS_JSON:
+            if self.settings.FIREBASE_CREDENTIALS_JSON:
                 try:
-                    if os.path.exists(settings.FIREBASE_CREDENTIALS_JSON):
+                    if os.path.exists(self.settings.FIREBASE_CREDENTIALS_JSON):
                         cred = credentials.Certificate(
-                            settings.FIREBASE_CREDENTIALS_JSON
+                            self.settings.FIREBASE_CREDENTIALS_JSON
                         )
                     else:
-                        cred_info = json.loads(settings.FIREBASE_CREDENTIALS_JSON)
+                        cred_info = json.loads(self.settings.FIREBASE_CREDENTIALS_JSON)
                         cred = credentials.Certificate(cred_info)
 
                     firebase_admin.initialize_app(cred, options)
@@ -179,7 +180,3 @@ class FirebaseFCMService:
         except Exception as e:
             logger.error(f"Error sending multicast FCM message: {e}")
             return None
-
-
-# Singleton instance
-firebase_fcm_service = FirebaseFCMService()

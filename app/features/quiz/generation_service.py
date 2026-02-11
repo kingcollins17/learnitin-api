@@ -1,7 +1,7 @@
 """Service for generating quiz content using AI."""
 
 from typing import Optional
-from app.services.langchain_service import langchain_service
+from app.services.langchain_service import LangChainService
 from app.features.lessons.models import Lesson
 from app.features.quiz.schemas import QuizGenerationSchema
 
@@ -9,8 +9,8 @@ from app.features.quiz.schemas import QuizGenerationSchema
 class QuizGenerationService:
     """Service for generating quizzes from lesson content."""
 
-    def __init__(self):
-        self.ai_service = langchain_service
+    def __init__(self, ai_service: LangChainService):
+        self.ai_service = ai_service
 
     async def generate_quiz(
         self, lesson: Lesson, question_count: int = 10
@@ -54,7 +54,3 @@ Requirements:
         )
 
         return quiz_data  # type: ignore
-
-
-# Singleton instance
-quiz_generation_service = QuizGenerationService()

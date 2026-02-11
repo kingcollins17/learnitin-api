@@ -12,8 +12,15 @@ from fastapi import (
 from typing import List, Optional
 from app.features.subscriptions.service import SubscriptionService
 import traceback
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.common.database.session import get_async_session, AsyncSessionLocal
+from app.common.database.session import get_async_session
+from app.common.dependencies import (
+    get_lesson_service,
+    get_user_lesson_service,
+    get_notification_service,
+    get_course_repository,
+    get_module_repository,
+)
+from app.features.notifications.service import NotificationService
 from app.common.deps import get_current_active_user
 from app.common.responses import ApiResponse, success_response
 from app.features.users.models import User
@@ -41,12 +48,8 @@ from app.features.lessons.schemas import (
     CompleteLessonResponse,
 )
 from app.features.lessons.service import LessonService, UserLessonService
-from app.features.lessons.lecture_service import lecture_conversion_service
-from app.services.audio_generation_service import audio_generation_service
-from app.services.storage_service import firebase_storage_service
-from app.features.courses.repository import CourseRepository
-from app.features.modules.repository import ModuleRepository
-from app.features.lessons.generation_service import lesson_generation_service
+
+
 from app.features.lessons.tasks import (
     generate_audio_background,
     generate_lesson_content_background,
@@ -68,7 +71,7 @@ async def get_lessons(
     course_id: int | None = Query(None, description="Filter by course ID"),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     per_page: int = Query(100, ge=1, le=100, description="Items per page"),
-    session: AsyncSession = Depends(get_async_session),
+    service: LessonService = Depends(get_lesson_service),
 ):
     """
     Get lessons filtered by module or course.
@@ -84,7 +87,6 @@ async def get_lessons(
     **No authentication required** for public courses.
     """
     try:
-        service = LessonService(session)
 
         if module_id:
             lessons = await service.get_lessons_by_module(
@@ -127,7 +129,9 @@ async def get_lessons(
 async def get_lesson(
     lesson_id: int,
     background_tasks: BackgroundTasks,
-    session: AsyncSession = Depends(get_async_session),
+    service: LessonService = Depends(get_lesson_service),
+    user_lesson_service: UserLessonService = Depends(get_user_lesson_service),
+    notification_service: NotificationService = Depends(get_notification_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -137,7 +141,6 @@ async def get_lesson(
     """
     try:
         assert current_user.id
-        service = LessonService(session)
         lesson = await service.get_lesson_by_id(lesson_id)
 
         if not lesson:
@@ -147,7 +150,6 @@ async def get_lesson(
             )
 
         # Check if lesson is unlocked for the user
-        user_lesson_service = UserLessonService(session)
         user_lesson = await user_lesson_service.get_by_user_and_lesson(
             user_id=current_user.id, lesson_id=lesson_id
         )
@@ -166,7 +168,8 @@ async def get_lesson(
                 background_tasks.add_task(
                     generate_lesson_content_background,
                     lesson_id=lesson_id,
-                    session=session,
+                    lesson_service=service,
+                    notification_service=notification_service,
                     user_id=current_user.id,
                     course_id=lesson.course_id,
                     module_id=lesson.module_id,
@@ -195,7 +198,7 @@ async def get_lesson(
 async def update_lesson(
     lesson_id: int,
     lesson_update: LessonUpdate,
-    session: AsyncSession = Depends(get_async_session),
+    service: LessonService = Depends(get_lesson_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -204,7 +207,6 @@ async def update_lesson(
     **Authentication required.**
     """
     try:
-        service = LessonService(session)
         updated_lesson = await service.update_lesson(
             lesson_id=lesson_id,
             lesson_update=lesson_update.model_dump(exclude_unset=True),
@@ -231,7 +233,9 @@ async def update_lesson(
 async def start_lesson(
     lesson_id: int,
     background_tasks: BackgroundTasks,
-    session: AsyncSession = Depends(get_async_session),
+    lesson_service: LessonService = Depends(get_lesson_service),
+    user_lesson_service: UserLessonService = Depends(get_user_lesson_service),
+    notification_service: NotificationService = Depends(get_notification_service),
     current_user: User = Depends(get_current_active_user),
     _access: None = Depends(ResourceAccessControl(SubscriptionResourceType.LESSON)),
     subscription: Subscription = Depends(get_user_subscription),
@@ -246,7 +250,6 @@ async def start_lesson(
         assert current_user.id
 
         # 1. Fetch lesson details first to get context (module_id, course_id)
-        lesson_service = LessonService(session)
         lesson = await lesson_service.get_lesson_by_id(lesson_id)
 
         if not lesson:
@@ -256,7 +259,6 @@ async def start_lesson(
             )
 
         # Check if user is enrolled in the course
-        user_lesson_service = UserLessonService(session)
         is_enrolled = await user_lesson_service.is_user_enrolled(
             user_id=current_user.id, course_id=lesson.course_id
         )
@@ -276,7 +278,7 @@ async def start_lesson(
             usage_service=usage_service,
             subscription=subscription,
         )
-        await session.commit()
+        await user_lesson_service.user_lesson_repo.session.commit()
 
         # 3. Check and handle content availability
         is_content_available = True
@@ -289,7 +291,8 @@ async def start_lesson(
                 background_tasks.add_task(
                     generate_lesson_content_background,
                     lesson_id=lesson_id,
-                    session=session,
+                    lesson_service=lesson_service,
+                    notification_service=notification_service,
                     user_id=current_user.id,
                     course_id=lesson.course_id,
                     module_id=lesson.module_id,
@@ -323,7 +326,7 @@ async def start_lesson(
 async def get_user_lessons(
     module_id: int | None = Query(None, description="Filter by module ID"),
     course_id: int | None = Query(None, description="Filter by course ID"),
-    session: AsyncSession = Depends(get_async_session),
+    service: UserLessonService = Depends(get_user_lesson_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -339,7 +342,6 @@ async def get_user_lessons(
     """
     try:
         assert current_user.id
-        service = UserLessonService(session)
 
         if module_id:
             user_lessons = await service.get_user_lessons_by_module(
@@ -385,7 +387,7 @@ async def get_user_lessons(
 @router.get("/user/lessons/detail", response_model=ApiResponse[UserLessonResponse])
 async def get_user_lesson(
     lesson_id: int = Query(..., description="ID of the lesson"),
-    session: AsyncSession = Depends(get_async_session),
+    service: UserLessonService = Depends(get_user_lesson_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -395,7 +397,6 @@ async def get_user_lesson(
     """
     try:
         assert current_user.id
-        service = UserLessonService(session)
         user_lesson = await service.get_user_lesson(
             user_id=current_user.id,
             lesson_id=lesson_id,
@@ -419,7 +420,7 @@ async def get_user_lesson(
 async def update_user_lesson(
     lesson_id: int = Query(..., description="ID of the lesson"),
     user_lesson_update: Optional[UserLessonUpdate] = Body(None),
-    session: AsyncSession = Depends(get_async_session),
+    service: UserLessonService = Depends(get_user_lesson_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -429,7 +430,6 @@ async def update_user_lesson(
     """
     try:
         assert current_user.id
-        service = UserLessonService(session)
 
         update_data = (
             user_lesson_update.model_dump(exclude_unset=True)
@@ -460,7 +460,7 @@ async def update_user_lesson(
 @router.post("/user/lessons/unlock", response_model=ApiResponse[UserLessonResponse])
 async def unlock_lesson(
     lesson_id: int = Query(..., description="ID of the lesson"),
-    session: AsyncSession = Depends(get_async_session),
+    service: UserLessonService = Depends(get_user_lesson_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -470,7 +470,6 @@ async def unlock_lesson(
     """
     try:
         assert current_user.id
-        service = UserLessonService(session)
         user_lesson = await service.unlock_lesson(
             user_id=current_user.id,
             lesson_id=lesson_id,
@@ -496,7 +495,8 @@ async def unlock_lesson(
 async def unlock_audio(
     background_tasks: BackgroundTasks,
     lesson_id: int = Query(..., description="ID of the lesson"),
-    session: AsyncSession = Depends(get_async_session),
+    lesson_service: LessonService = Depends(get_lesson_service),
+    user_lesson_service: UserLessonService = Depends(get_user_lesson_service),
     current_user: User = Depends(get_current_active_user),
     _access: None = Depends(ResourceAccessControl(SubscriptionResourceType.AUDIO)),
     subscription: Subscription = Depends(get_user_subscription),
@@ -509,8 +509,6 @@ async def unlock_audio(
     """
     try:
         assert current_user.id
-        lesson_service = LessonService(session)
-        service = UserLessonService(session)
 
         # 1. Get the lesson
         lesson = await lesson_service.get_lesson_by_id(lesson_id)
@@ -521,13 +519,13 @@ async def unlock_audio(
             )
 
         # 2. Unlock audio for user (usage increment is now inside this service call)
-        user_lesson = await service.unlock_audio(
+        user_lesson = await user_lesson_service.unlock_audio(
             user_id=current_user.id,
             lesson_id=lesson_id,
             usage_service=usage_service,
             subscription=subscription,
         )
-        await session.commit()
+        user_lesson_service.commit_all()
 
         # 3. Check for existing audio parts
         existing_audios = await lesson_service.get_audios_by_lesson_id(lesson_id)
@@ -545,7 +543,7 @@ async def unlock_audio(
                 background_tasks.add_task(
                     generate_audio_background,
                     lesson_id=lesson_id,
-                    session=session,
+                    lesson_service=lesson_service,
                     user_id=current_user.id,
                 )
                 message = "Audio is being prepared. Please check back shortly."
@@ -578,7 +576,7 @@ async def unlock_audio(
 )
 async def complete_quiz(
     lesson_id: int = Query(..., description="ID of the lesson"),
-    session: AsyncSession = Depends(get_async_session),
+    service: UserLessonService = Depends(get_user_lesson_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -588,7 +586,6 @@ async def complete_quiz(
     """
     try:
         assert current_user.id
-        service = UserLessonService(session)
         user_lesson = await service.complete_quiz(
             user_id=current_user.id,
             lesson_id=lesson_id,
@@ -613,7 +610,7 @@ async def complete_quiz(
 )
 async def complete_lesson(
     lesson_id: int = Query(..., description="ID of the lesson"),
-    session: AsyncSession = Depends(get_async_session),
+    service: UserLessonService = Depends(get_user_lesson_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -623,7 +620,6 @@ async def complete_lesson(
     """
     try:
         assert current_user.id
-        service = UserLessonService(session)
         result = await service.complete_lesson(
             user_id=current_user.id,
             lesson_id=lesson_id,
@@ -658,64 +654,12 @@ async def complete_lesson(
         )
 
 
-@router.post(
-    "/{lesson_id}/generate-audio", response_model=ApiResponse[LessonDetailResponse]
-)
-async def generate_audio(
-    lesson_id: int,
-    bg: BackgroundTasks,
-    session: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_active_user),
-):
-    """
-    Generate and save audio transcript for a lesson.
-
-    **Authentication required.**
-    """
-    try:
-        assert current_user.id
-        service = LessonService(session)
-        lesson = await service.get_lesson_by_id(lesson_id)
-
-        if not lesson:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Lesson not found",
-            )
-
-        if audio_tracker.start_tracking(lesson_id, current_user.id):
-            bg.add_task(
-                generate_audio_background,
-                lesson_id=lesson_id,
-                session=session,
-                user_id=current_user.id,
-            )
-
-            return success_response(
-                data=lesson,
-                details="Audio generation started in background",
-            )
-        else:
-            return success_response(
-                data=lesson,
-                details="Audio generation is already in progress",
-            )
-    except HTTPException:
-        raise
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate audio: {str(e)}",
-        )
-
-
 @router.get(
     "/{lesson_id}/audios", response_model=ApiResponse[List[LessonAudioResponse]]
 )
 async def get_lesson_audios(
     lesson_id: int,
-    session: AsyncSession = Depends(get_async_session),
+    service: LessonService = Depends(get_lesson_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -729,7 +673,6 @@ async def get_lesson_audios(
     """
     try:
         assert current_user.id
-        service = LessonService(session)
         audios = await service.get_lesson_audios(
             user_id=current_user.id, lesson_id=lesson_id
         )

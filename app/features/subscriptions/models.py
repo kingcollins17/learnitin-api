@@ -3,7 +3,8 @@
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
-from sqlmodel import Field, SQLModel, Relationship
+from sqlmodel import Field, SQLModel, Relationship, Column
+from sqlalchemy import ForeignKey, Integer
 
 
 class SubscriptionStatus(str, Enum):
@@ -29,7 +30,14 @@ class Subscription(SQLModel, table=True):
     __tablename__ = "subscriptions"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    user_id: int = Field(index=True, nullable=False)
+    user_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("users.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        )
+    )
     product_id: str = Field(max_length=100, nullable=False)
     purchase_token: Optional[str] = Field(
         default=None, max_length=255, index=True, nullable=True
@@ -60,10 +68,13 @@ class SubscriptionUsage(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     subscription_id: int = Field(
-        foreign_key="subscriptions.id",
-        unique=True,  # Enforces one-to-one relationship
-        index=True,
-        nullable=False,
+        sa_column=Column(
+            Integer,
+            ForeignKey("subscriptions.id", ondelete="CASCADE"),
+            unique=True,
+            index=True,
+            nullable=False,
+        )
     )
     year: int = Field(nullable=False)
     month: int = Field(nullable=False)

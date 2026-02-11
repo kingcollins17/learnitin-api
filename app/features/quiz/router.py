@@ -13,6 +13,11 @@ from app.features.quiz.schemas import QuizResponse
 from app.features.quiz.service import QuizService
 from app.features.lessons.service import LessonService, UserLessonService
 from app.features.lessons.schemas import UserLessonResponse
+from app.common.dependencies import (
+    get_quiz_service,
+    get_lesson_service,
+    get_user_lesson_service,
+)
 
 router = APIRouter()
 
@@ -25,6 +30,8 @@ async def get_quiz(
     ),
     session: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user),
+    service: QuizService = Depends(get_quiz_service),
+    lesson_service: LessonService = Depends(get_lesson_service),
 ):
     """
     Get quiz for a specific lesson.
@@ -32,8 +39,6 @@ async def get_quiz(
     If `generate_if_missing` is True and no quiz exists, it will trigger AI generation.
     """
     try:
-        service = QuizService(session)
-        lesson_service = LessonService(session)
 
         # 1. Check if quiz exists
         quiz = await service.get_quiz_by_lesson(lesson_id)
@@ -82,6 +87,8 @@ async def generate_quiz(
     question_count: int = Query(5, ge=1, le=10),
     session: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user),
+    service: QuizService = Depends(get_quiz_service),
+    lesson_service: LessonService = Depends(get_lesson_service),
 ):
     """
     Manually trigger AI generation for a lesson quiz.
@@ -90,8 +97,6 @@ async def generate_quiz(
     unless we implement deletion or update logic.
     """
     try:
-        service = QuizService(session)
-        lesson_service = LessonService(session)
 
         # 1. Check if lesson exists
         lesson = await lesson_service.get_lesson_by_id(lesson_id)
@@ -142,13 +147,13 @@ async def complete_quiz(
     lesson_id: int,
     session: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user),
+    service: UserLessonService = Depends(get_user_lesson_service),
 ):
     """
     Mark quiz as completed for a specific lesson for the current user.
     """
     try:
         assert current_user.id
-        service = UserLessonService(session)
         user_lesson = await service.complete_quiz(
             user_id=current_user.id,
             lesson_id=lesson_id,

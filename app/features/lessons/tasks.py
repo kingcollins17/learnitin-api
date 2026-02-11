@@ -20,18 +20,18 @@ from app.features.notifications.schemas import NotificationCreate
 from app.features.notifications.models import NotificationType
 from app.features.courses.repository import CourseRepository
 from app.features.modules.repository import ModuleRepository
-from app.features.lessons.generation_service import lesson_generation_service
 
 
 async def generate_audio_background(
-    lesson_id: int, session: AsyncSession, user_id: Optional[int] = None
+    lesson_id: int,
+    lesson_service: LessonService,
+    user_id: Optional[int] = None,
 ):
     """
     Background task to generate audio for a lesson.
     """
     try:
-        lesson_service = LessonService(session)
-        audio_repo = LessonAudioRepository(session)
+        audio_repo = lesson_service.audio_repo
 
         # 1. Get the lesson
         lesson = await lesson_service.get_lesson_by_id(lesson_id)
@@ -125,7 +125,8 @@ async def generate_audio_background(
 
 async def generate_lesson_content_background(
     lesson_id: int,
-    session: AsyncSession,
+    lesson_service: LessonService,
+    notification_service: NotificationService,
     user_id: int,
     course_id: int,
     module_id: int,
@@ -134,9 +135,6 @@ async def generate_lesson_content_background(
     Background task to generate lesson content.
     """
     try:
-        lesson_service = LessonService(session)
-        notification_service = NotificationService(session)
-
         # 1. Get the lesson
         lesson = await lesson_service.get_lesson_by_id(lesson_id)
         if not lesson:
@@ -149,8 +147,8 @@ async def generate_lesson_content_background(
             return
 
         # Fetch course and module details for context
-        course_repo = CourseRepository(session)
-        module_repo = ModuleRepository(session)
+        course_repo = lesson_service.course_repo
+        module_repo = lesson_service.module_repo
 
         course = await course_repo.get_by_id(course_id)
         module = await module_repo.get_by_id(module_id)
@@ -160,10 +158,12 @@ async def generate_lesson_content_background(
             return
 
         print(f"Generating content for lesson {lesson_id}...")
-        generated_content = await lesson_generation_service.generate_lesson_content(
-            course=course,
-            module=module,
-            lesson=lesson,
+        generated_content = (
+            await lesson_service.generation_service.generate_lesson_content(
+                course=course,
+                module=module,
+                lesson=lesson,
+            )
         )
 
         # Update lesson with generated content
@@ -171,7 +171,7 @@ async def generate_lesson_content_background(
             lesson_id=lesson_id,
             lesson_update={"content": generated_content},
         )
-        await session.commit()
+        await lesson_service.repository.session.commit()
         print(f"Content generated and saved for lesson {lesson_id}")
 
         # Dispatch in-app notification

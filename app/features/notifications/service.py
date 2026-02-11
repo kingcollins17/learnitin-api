@@ -8,15 +8,20 @@ from fastapi import HTTPException, status
 from .repository import NotificationRepository
 from .models import Notification, NotificationType
 from .schemas import NotificationCreate, NotificationUpdate
+from app.features.users.models import User
+from app.common.service import Commitable
 from app.common.events import event_bus, NotificationInAppPushEvent
 
 
-class NotificationService:
+class NotificationService(Commitable):
     """Service for notification business logic."""
 
-    def __init__(self, session: AsyncSession):
-        self.session = session
-        self.repository = NotificationRepository(session)
+    def __init__(self, notification_repository: NotificationRepository):
+        self.repository = notification_repository
+
+    async def commit_all(self) -> None:
+        """Commit all active sessions in the service's repositories."""
+        await self.repository.session.commit()
 
     async def get_user_notifications(
         self, user_id: int, skip: int = 0, limit: int = 20

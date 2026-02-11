@@ -1,5 +1,7 @@
 """Course business logic and service layer."""
 
+from app.services.storage_service import FirebaseStorageService
+
 from fastapi import HTTPException, status
 from typing import List, Optional, TypeVar
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,31 +37,41 @@ from app.features.subscriptions.usage_service import SubscriptionUsageService
 import json
 import re
 import uuid
-from app.services.image_generation_service import image_generation_service
-from app.services.storage_service import firebase_storage_service
+from app.services.image_generation_service import ImageGenerationService
+from app.common.service import Commitable
 
 
 T = TypeVar("T", bound=CourseResponse)
 
 
-class CourseService:
+class CourseService(Commitable):
     """Service for course business logic."""
 
     def __init__(
         self,
-        session: AsyncSession,
         course_repository: CourseRepository,
         module_repository: ModuleRepository,
         lesson_repository: LessonRepository,
         user_course_repository: UserCourseRepository,
         review_repository: ReviewRepository,
+        storage_service: FirebaseStorageService,
+        image_gen_service: ImageGenerationService,
     ):
-        self.session = session
         self.repository = course_repository
         self.module_repository = module_repository
         self.lesson_repository = lesson_repository
         self.user_course_repository = user_course_repository
         self.review_repository = review_repository
+        self.storage_service = storage_service
+        self.image_gen_service = image_gen_service
+
+    async def commit_all(self) -> None:
+        """Commit all active sessions in the service's repositories."""
+        await self.repository.session.commit()
+        await self.module_repository.session.commit()
+        await self.lesson_repository.session.commit()
+        await self.user_course_repository.session.commit()
+        await self.review_repository.session.commit()
 
     async def create_course(
         self,
@@ -140,16 +152,15 @@ class CourseService:
                 print(f"Course not found for image generation: {course_id}")
                 return None
 
-            # Create a descriptive prompt for the image
             prompt = f"Abstract, modern, high quality cover image for an online course titled '{course.title}'. Context: {course.description[:200] if course.description else ''}"
             print(f"Generating course image with prompt: {prompt}")
 
-            image_bytes = await image_generation_service.generate_image(prompt)
+            image_bytes = await self.image_gen_service.generate_image(prompt)
 
             if image_bytes:
                 filename = f"courses/{course.user_id}/{uuid.uuid4()}.png"
                 # Upload to firebase
-                image_url = firebase_storage_service.upload_bytes(
+                image_url = self.storage_service.upload_bytes(
                     data=image_bytes,
                     destination_path=filename,
                     content_type="image/png",
@@ -463,7 +474,7 @@ class CourseService:
             course_id: ID of the course to delete
 
         Raises:
-            HTTPException: If course not found or user is not the creator
+            HTTPException: If course not found, user is not the creator, or course is public
         """
         course = await self.repository.get_by_id(course_id)
 
@@ -480,15 +491,26 @@ class CourseService:
                 detail="You don't have permission to delete this course",
             )
 
+        # Public courses cannot be deleted
+        if course.is_public:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Public courses cannot be deleted",
+            )
+
         await self.repository.delete(course)
 
 
-class CategoryService:
+class CategoryService(Commitable):
     """Service for category business logic."""
 
-    def __init__(self, session: AsyncSession, category_repository: CategoryRepository):
-        self.session = session
+    def __init__(self, category_repository: CategoryRepository):
+
         self.category_repository = category_repository
+
+    async def commit_all(self) -> None:
+        """Commit all active sessions in the service's repositories."""
+        await self.category_repository.session.commit()
 
     async def create_category(self, category_data: dict) -> Category:
         """Create a new category."""
@@ -542,18 +564,22 @@ class CategoryService:
         await self.category_repository.delete(category)
 
 
-class SubCategoryService:
+class SubCategoryService(Commitable):
     """Service for sub-category business logic."""
 
     def __init__(
         self,
-        session: AsyncSession,
         subcategory_repository: SubCategoryRepository,
         category_repository: CategoryRepository,
     ):
-        self.session = session
+
         self.subcategory_repository = subcategory_repository
         self.category_repository = category_repository
+
+    async def commit_all(self) -> None:
+        """Commit all active sessions in the service's repositories."""
+        await self.subcategory_repository.session.commit()
+        await self.category_repository.session.commit()
 
     async def create_subcategory(self, sub_category_data: dict) -> SubCategory:
         """Create a new sub-category."""

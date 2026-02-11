@@ -19,21 +19,19 @@ class Review(SQLModel, table=True):
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    user_id: Optional[int] = Field(
-        default=None,
+    user_id: int = Field(
         sa_column=Column(
             Integer,
-            ForeignKey("users.id", ondelete="SET NULL"),
-            nullable=True,
+            ForeignKey("users.id", ondelete="CASCADE"),
+            nullable=False,
             index=True,
         ),
     )
-    course_id: Optional[int] = Field(
-        default=None,
+    course_id: int = Field(
         sa_column=Column(
             Integer,
-            ForeignKey("courses.id", ondelete="SET NULL"),
-            nullable=True,
+            ForeignKey("courses.id", ondelete="CASCADE"),
+            nullable=False,
             index=True,
         ),
     )

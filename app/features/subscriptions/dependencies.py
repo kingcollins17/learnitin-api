@@ -65,7 +65,9 @@ async def get_user_subscription(
         return subscription
 
     # Step 2: No active subscription - check if user has any historical subscription
-    any_subscription = await service.repository.get_by_user_id(current_user.id)
+    any_subscription = await service.subscription_repository.get_by_user_id(
+        current_user.id
+    )
 
     if any_subscription:
         # User has a subscription but it's not active - handle based on type

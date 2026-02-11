@@ -8,8 +8,8 @@ from typing import Optional
 from google import genai
 from google.genai import types
 
-from app.common.config import settings
-from app.services.audio_conversion_service import pcm_to_mp3_bytes
+from app.common.config import Settings
+from app.services.audio_conversion_service import AudioConversionService
 
 # Gemini TTS Content Limits
 # Official limit: 5,000 bytes per request
@@ -30,7 +30,9 @@ class ContentTooLongError(ValueError):
 class AudioGenerationService:
     """Service for generating audio content."""
 
-    def __init__(self):
+    def __init__(self, conversion_service: AudioConversionService, settings: Settings):
+        self.conversion_service = conversion_service
+        self.settings = settings
         self.api_key = settings.GEMINI_API_KEY
         if not self.api_key:
             print("Warning: GEMINI_API_KEY not set")
@@ -176,12 +178,16 @@ class AudioGenerationService:
                     current_mime_type = inline_data.mime_type
 
                     # Determine if this is raw PCM or something else based on mime
-                    ext = mimetypes.guess_extension(current_mime_type)
+                    ext = mimetypes.guess_extension(
+                        current_mime_type  # ty:ignore[invalid-argument-type]
+                    )
                     if ext is None:
                         is_raw_pcm = True
                         last_mime_type = current_mime_type
 
-                    combined_data.extend(inline_data.data)
+                    combined_data.extend(
+                        inline_data.data  # ty:ignore[invalid-argument-type]
+                    )
         except Exception as e:
             print(f"Error during generate_content_stream: {e}")
             return b""
@@ -250,7 +256,7 @@ class AudioGenerationService:
         Returns:
             MP3 encoded audio data as bytes
         """
-        return pcm_to_mp3_bytes(
+        return self.conversion_service.pcm_to_mp3_bytes(
             pcm_bytes=pcm_bytes,
             sample_rate=sample_rate,
             channels=channels,
@@ -341,7 +347,3 @@ class AudioGenerationService:
                     pass
 
         return {"bits_per_sample": bits_per_sample, "rate": rate}
-
-
-# Singleton instance
-audio_generation_service = AudioGenerationService()

@@ -9,7 +9,7 @@ from app.features.courses.schemas import (
     ModuleOverview,
     LessonOverview,
 )
-from app.services.langchain_service import langchain_service
+from app.services.langchain_service import LangChainService
 from app.features.subscriptions.models import Subscription, SubscriptionResourceType
 from app.features.subscriptions.usage_service import SubscriptionUsageService
 from typing import List, Union, Optional
@@ -17,6 +17,9 @@ from typing import List, Union, Optional
 
 class CourseGenerationService:
     """Service for AI-powered course generation."""
+
+    def __init__(self, ai_service: LangChainService):
+        self.ai_service = ai_service
 
     async def generate_courses(
         self,
@@ -82,7 +85,7 @@ Make the courses practical, engaging, and suitable for {request.level} learners.
             courses: List[CourseOutline]
 
         # Use LangChain service to generate courses
-        response: Union[CoursesResponse, str] = await langchain_service.invoke(
+        response: Union[CoursesResponse, str] = await self.ai_service.invoke(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             response_schema=CoursesResponse,

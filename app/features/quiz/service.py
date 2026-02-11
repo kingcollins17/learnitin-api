@@ -2,8 +2,9 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.features.quiz.repository import QuizRepository, QuestionRepository
-from app.features.quiz.generation_service import quiz_generation_service
+from app.features.quiz.generation_service import QuizGenerationService
 from app.features.quiz.models import Quiz, Question
+from app.common.service import Commitable
 from app.features.lessons.models import Lesson
 from app.common.events import event_bus, QuizGeneratedEvent
 import logging
@@ -11,13 +12,23 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class QuizService:
+class QuizService(Commitable):
     """Service for managing quizzes."""
 
-    def __init__(self, session: AsyncSession):
-        self.session = session
-        self.quiz_repo = QuizRepository(session)
-        self.question_repo = QuestionRepository(session)
+    def __init__(
+        self,
+        quiz_repo: QuizRepository,
+        question_repo: QuestionRepository,
+        generation_service: QuizGenerationService,
+    ):
+        self.quiz_repo = quiz_repo
+        self.question_repo = question_repo
+        self.generation_service = generation_service
+
+    async def commit_all(self) -> None:
+        """Commit all active sessions in the service's repositories."""
+        await self.quiz_repo.session.commit()
+        await self.question_repo.session.commit()
 
     async def generate_and_save_quiz(
         self, lesson: Lesson, question_count: int = 10
@@ -35,7 +46,7 @@ class QuizService:
         logger.info(f"Generating quiz for lesson: {lesson.id}")
 
         # 1. Generate quiz data using AI
-        quiz_data = await quiz_generation_service.generate_quiz(
+        quiz_data = await self.generation_service.generate_quiz(
             lesson=lesson, question_count=question_count
         )
         print(f"Quiz generated for lesson {lesson.title}")
@@ -64,7 +75,7 @@ class QuizService:
             await self.question_repo.create(question)
 
         # 4. Commit all changes
-        await self.session.commit()
+        await self.commit_all()
 
         # 5. Dispatch event
         quiz_id = created_quiz.id

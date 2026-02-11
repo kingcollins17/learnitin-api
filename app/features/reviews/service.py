@@ -8,14 +8,14 @@ from app.features.reviews.schemas import ReviewCreate, ReviewUpdate, ReviewRespo
 from app.features.reviews.repository import ReviewRepository, get_cached_summary
 from app.features.courses.repository import CourseRepository
 from datetime import datetime, timezone
+from app.common.service import Commitable
 
 
-class ReviewService:
+class ReviewService(Commitable):
     """Service for review business logic."""
 
     def __init__(
         self,
-        session: AsyncSession,
         review_repo: ReviewRepository,
         course_repo: CourseRepository,
     ):
@@ -27,9 +27,13 @@ class ReviewService:
             review_repo: The repository for review data operations.
             course_repo: The repository for course data operations.
         """
-        self.session = session
         self.review_repo = review_repo
         self.course_repo = course_repo
+
+    async def commit_all(self) -> None:
+        """Commit all active sessions in the service's repositories."""
+        await self.review_repo.session.commit()
+        await self.course_repo.session.commit()
 
     async def create_review(
         self, user_id: int, review_in: ReviewCreate

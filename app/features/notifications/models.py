@@ -24,7 +24,12 @@ class Notification(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(
-        sa_column=Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+        sa_column=Column(
+            Integer,
+            ForeignKey("users.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        )
     )
     title: str = Field(nullable=False)
     message: str = Field(sa_column=Column(Text, nullable=False))
