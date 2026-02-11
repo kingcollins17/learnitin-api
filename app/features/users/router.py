@@ -200,9 +200,6 @@ async def verify_user(
             email=data.email, code=data.code
         )
 
-        # Commit the transaction
-        await service.session.commit()
-
         return success_response(
             data=user, details="User verified and activated successfully"
         )
