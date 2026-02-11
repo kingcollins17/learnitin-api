@@ -33,6 +33,11 @@ Focus on clarity, educational value, and practical examples.
 Structure the content with clear headings, bullet points, and code blocks where appropriate.
 Do not include the lesson title as a top-level heading, as it will be displayed separately.
 
+MOBILE READABILITY:
+Avoid using Markdown tables as they wrap poorly on narrow mobile screens. 
+Instead, use descriptive lists, nested bullet points, or separate sections for comparisons. 
+If a tabular format is absolutely essential for the data, ensure it is structured simply or suggest horizontal scrolling by providing the content in a way that respects mobile width constraints.
+
 IMPORTANT: Adapt the content structure to fit the lesson's specific description and objectives.
 Different lessons require different approaches - some may need step-by-step tutorials, others may need 
 conceptual explanations, comparisons, case studies, or hands-on exercises. Choose the most appropriate 
