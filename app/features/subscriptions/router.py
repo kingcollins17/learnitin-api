@@ -43,6 +43,7 @@ from .schemas import (
     SubscriptionVerifyRequest,
     GooglePlayNotification,
     SubscriptionUsageResponse,
+    FreePlanLimitsResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -70,6 +71,17 @@ async def get_my_subscription(
     return success_response(
         data=subscription_resp, details="Subscription retrieved successfully"
     )
+
+
+@router.get("/plans/free/limits", response_model=ApiResponse[FreePlanLimitsResponse])
+async def get_free_plan_limits(
+    service: SubscriptionService = Depends(get_subscription_service),
+):
+    """
+    Get the monthly usage limits for the free plan.
+    """
+    limits = await service.get_free_plan_limits()
+    return success_response(data=limits, details="Free plan limits retrieved")
 
 
 @router.post("/verify", response_model=ApiResponse[SubscriptionResponse])

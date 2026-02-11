@@ -114,3 +114,11 @@ class PubSubPayload(BaseModel):
 
     message: Optional[PubSubMessage] = None
     subscription: Optional[str] = None
+
+
+class FreePlanLimitsResponse(BaseModel):
+    """Response schema for free plan limits."""
+
+    learning_journeys_limit: int
+    lessons_limit: int
+    audio_lessons_limit: int

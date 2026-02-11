@@ -60,7 +60,9 @@ async def get_user_subscription(
             if now > expiry_with_grace:
                 # Premium expired beyond grace period - demote to free
 
-                subscription = await service.create_free_subscription(current_user.id)
+                subscription = await service.create_free_subscription(
+                    current_user.id, dispatch_notification=True
+                )
 
         return subscription
 
@@ -83,7 +85,9 @@ async def get_user_subscription(
             if now > expiry_with_grace:
                 # Premium expired beyond grace period - demote to free
 
-                subscription = await service.create_free_subscription(current_user.id)
+                subscription = await service.create_free_subscription(
+                    current_user.id, dispatch_notification=True
+                )
             else:
                 # Still within grace period - return the expired premium
                 # (they still have access during grace period)
@@ -92,7 +96,10 @@ async def get_user_subscription(
         return subscription
 
     # Step 3: No subscription at all - create free plan
-    subscription = await service.create_free_subscription(current_user.id)
+    subscription = await service.create_free_subscription(
+        current_user.id,
+        dispatch_notification=False,
+    )
     return subscription
 
 

@@ -6,7 +6,8 @@ from .models import Subscription, SubscriptionStatus
 from .repository import SubscriptionRepository
 from .usage_repository import SubscriptionUsageRepository
 from .google_play_service import GooglePlayService
-from .schemas import SubscriptionVerifyRequest
+from .schemas import SubscriptionVerifyRequest, FreePlanLimitsResponse
+from app.common.config import settings
 
 # Dispatch notification event
 from app.common.service import Commitable
@@ -80,6 +81,7 @@ class SubscriptionService(Commitable):
         message: str,
         is_new: bool = True,
         in_app_event: InAppEventType = InAppEventType.INFO,
+        dispatch_notification: bool = True,
     ) -> Subscription:
         """Shared logic for saving a subscription, tracking usage, and notifying user."""
         if is_new:
@@ -90,16 +92,17 @@ class SubscriptionService(Commitable):
         if sub.id:
             await self._init_usage_tracking(sub.id)
 
-        await event_bus.dispatch(
-            NotificationInAppPushEvent(
-                user_id=sub.user_id,
-                title=title,
-                message=message,
-                type="subscription",
-                in_app_event=in_app_event,
-                data={"product_id": sub.product_id, "subscription_id": sub.id},
+        if dispatch_notification:
+            await event_bus.dispatch(
+                NotificationInAppPushEvent(
+                    user_id=sub.user_id,
+                    title=title,
+                    message=message,
+                    type="subscription",
+                    in_app_event=in_app_event,
+                    data={"product_id": sub.product_id, "subscription_id": sub.id},
+                )
             )
-        )
         return sub
 
     async def _update_status(
@@ -133,7 +136,9 @@ class SubscriptionService(Commitable):
             return sub
         return None
 
-    async def create_free_subscription(self, user_id: int) -> Subscription:
+    async def create_free_subscription(
+        self, user_id: int, dispatch_notification: bool = False
+    ) -> Subscription:
         """Deactivate old plans and start a fresh free plan."""
         await self.subscription_repository.deactivate_all_for_user(user_id)
         expiry = (datetime.now(timezone.utc) + timedelta(days=30)).replace(tzinfo=None)
@@ -151,12 +156,21 @@ class SubscriptionService(Commitable):
             title="Free Plan Activated",
             message="You're now on the Free plan. Ready to start your learning journey?",
             in_app_event=InAppEventType.INFO,
+            dispatch_notification=dispatch_notification,
         )
 
     async def get_or_create_free_subscription(self, user_id: int) -> Subscription:
         """Ensure the user has at least some active plan."""
         existing = await self.get_active_subscription(user_id)
         return existing or await self.create_free_subscription(user_id)
+
+    async def get_free_plan_limits(self) -> FreePlanLimitsResponse:
+        """Get the free plan limits from settings."""
+        return FreePlanLimitsResponse(
+            learning_journeys_limit=settings.FREE_PLAN_LEARNING_JOURNEYS_LIMIT,
+            lessons_limit=settings.FREE_PLAN_LESSONS_LIMIT,
+            audio_lessons_limit=settings.FREE_PLAN_AUDIO_LESSONS_LIMIT,
+        )
 
     async def verify_and_save(
         self, user_id: int, request: SubscriptionVerifyRequest
