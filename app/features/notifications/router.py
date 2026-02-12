@@ -19,6 +19,16 @@ from app.common.responses import ApiResponse, success_response
 from app.common.security import decode_access_token
 from app.features.users.models import User
 from .service import NotificationService
+from .repository import NotificationRepository
+
+
+def _get_notification_service(
+    session: AsyncSession = Depends(get_async_session),
+) -> NotificationService:
+    """Local dependency to avoid circular import with app.common.dependencies."""
+    return NotificationService(NotificationRepository(session))
+
+
 from .schemas import NotificationResponse, NotificationUpdate, NotificationCreate
 from app.common.events import event_bus, NotificationInAppPushEvent, InAppEventType
 import random
@@ -30,7 +40,7 @@ router = APIRouter()
 async def get_my_notifications(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    session: AsyncSession = Depends(get_async_session),
+    service: NotificationService = Depends(_get_notification_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -38,7 +48,6 @@ async def get_my_notifications(
     """
     try:
         assert current_user.id
-        service = NotificationService(session)
         notifications = await service.get_user_notifications(
             user_id=current_user.id, skip=skip, limit=limit
         )
@@ -56,7 +65,7 @@ async def get_my_notifications(
 
 @router.get("/unread-count", response_model=ApiResponse[int])
 async def get_unread_count(
-    session: AsyncSession = Depends(get_async_session),
+    service: NotificationService = Depends(_get_notification_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -64,7 +73,6 @@ async def get_unread_count(
     """
     try:
         assert current_user.id
-        service = NotificationService(session)
         count = await service.get_unread_count(user_id=current_user.id)
         return success_response(data=count)
     except Exception as e:
@@ -77,7 +85,7 @@ async def get_unread_count(
 @router.put("/{notification_id}/read", response_model=ApiResponse[NotificationResponse])
 async def mark_as_read(
     notification_id: int,
-    session: AsyncSession = Depends(get_async_session),
+    service: NotificationService = Depends(_get_notification_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -85,7 +93,6 @@ async def mark_as_read(
     """
     try:
         assert current_user.id
-        service = NotificationService(session)
         notification = await service.mark_as_read(
             notification_id=notification_id, user_id=current_user.id
         )
@@ -103,7 +110,7 @@ async def mark_as_read(
 
 @router.put("/read-all", response_model=ApiResponse[int])
 async def mark_all_as_read(
-    session: AsyncSession = Depends(get_async_session),
+    service: NotificationService = Depends(_get_notification_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -111,9 +118,8 @@ async def mark_all_as_read(
     """
     try:
         assert current_user.id
-        service = NotificationService(session)
         count = await service.mark_all_as_read(user_id=current_user.id)
-        await session.commit()
+        await service.commit_all()
         return success_response(data=count, details=f"Marked {count} items as read")
     except Exception as e:
         raise HTTPException(
@@ -125,7 +131,7 @@ async def mark_all_as_read(
 @router.delete("/{notification_id}", response_model=ApiResponse[bool])
 async def delete_notification(
     notification_id: int,
-    session: AsyncSession = Depends(get_async_session),
+    service: NotificationService = Depends(_get_notification_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -133,11 +139,10 @@ async def delete_notification(
     """
     try:
         assert current_user.id
-        service = NotificationService(session)
         await service.delete_notification(
             notification_id=notification_id, user_id=current_user.id
         )
-        await session.commit()
+        await service.commit_all()
         return success_response(data=True, details="Notification deleted")
     except HTTPException:
         raise
@@ -151,15 +156,14 @@ async def delete_notification(
 @router.post("/test-create", response_model=ApiResponse[NotificationResponse])
 async def test_create_notification(
     notification_data: NotificationCreate,
-    session: AsyncSession = Depends(get_async_session),
+    service: NotificationService = Depends(_get_notification_service),
 ):
     """
     Unprotected endpoint to create a notification for testing.
     """
     try:
-        service = NotificationService(session)
         notification = await service.create_notification(notification_data)
-        await session.commit()
+        await service.commit_all()
         return success_response(data=notification, details="Test notification created")
     except Exception as e:
         traceback.print_exc()
