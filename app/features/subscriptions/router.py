@@ -283,6 +283,19 @@ async def google_play_webhook(
 
     except Exception as e:
         logger.error(f"Error processing webhook: {e}")
+        try:
+            await event_bus.dispatch(
+                LogEvent(
+                    level=LogLevel.ERROR,
+                    message=f"Error processing Google Play Webhook: {notification_json.get('packageName', 'Unknown package')}",
+                    data={"error": str(e), "stacktrace": traceback.format_exc()},
+                )
+            )
+        except:
+            pass
+        if isinstance(e, HTTPException):
+            raise
+
         # Still return 200 to prevent Google from retrying malformed data
 
     return success_response(data={"status": "success"}, details="Webhook processed")
