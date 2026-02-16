@@ -525,7 +525,7 @@ async def unlock_audio(
             usage_service=usage_service,
             subscription=subscription,
         )
-        user_lesson_service.commit_all()
+        await user_lesson_service.commit_all()
 
         # 3. Check for existing audio parts
         existing_audios = await lesson_service.get_audios_by_lesson_id(lesson_id)
