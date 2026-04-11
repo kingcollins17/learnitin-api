@@ -221,13 +221,13 @@ class AdminService(Commitable):
         user.updated_at = datetime.now(timezone.utc)
         updated_user = await self.user_repository.update(user)
 
-        # Notify user about ban via event bus
-        ban_message = f"Your account has been suspended."
+        # Notify user about ban via notification service (persists to DB)
+        ban_message = "Your account has been suspended."
         if reason:
             ban_message += f" Reason: {reason}"
 
-        await event_bus.dispatch(
-            NotificationInAppPushEvent(
+        await self.notification_service.create_notification(
+            NotificationCreate(
                 user_id=user_id,
                 title="Account Suspended",
                 message=ban_message,
@@ -256,8 +256,9 @@ class AdminService(Commitable):
         user.updated_at = datetime.now(timezone.utc)
         updated_user = await self.user_repository.update(user)
 
-        await event_bus.dispatch(
-            NotificationInAppPushEvent(
+        # Notify user about unban
+        await self.notification_service.create_notification(
+            NotificationCreate(
                 user_id=user_id,
                 title="Account Restored",
                 message="Your account has been reactivated. Welcome back!",
@@ -316,7 +317,18 @@ class AdminService(Commitable):
             title="Premium Granted!",
             message=f"You've been granted {duration_days} days of premium access by an administrator!",
             is_new=True,
-            dispatch_notification=True,
+            dispatch_notification=False,  # We'll do it via notification_service for persistence
+        )
+
+        # Notify via notification service (DB + Push)
+        await self.notification_service.create_notification(
+            NotificationCreate(
+                user_id=user_id,
+                title="Premium Activated",
+                message=f"You've been granted {duration_days} days of premium access. Enjoy your learning journey!",
+                type="system",
+                data={"product_id": sub.product_id, "subscription_id": sub.id},
+            )
         )
 
         logger.info(
@@ -336,7 +348,17 @@ class AdminService(Commitable):
         await self._get_user_entity(user_id)
 
         sub = await self.subscription_service.create_free_subscription(
-            user_id, dispatch_notification=True
+            user_id, dispatch_notification=False
+        )
+
+        # Notify via notification service
+        await self.notification_service.create_notification(
+            NotificationCreate(
+                user_id=user_id,
+                title="Subscription Updated",
+                message="Your premium access has been revoked. You are now on the Free plan.",
+                type="system",
+            )
         )
 
         logger.info(f"Admin revoked premium for user {user_id}")
@@ -516,8 +538,8 @@ class AdminService(Commitable):
         # Verify user exists
         await self._get_user_entity(user_id)
 
-        await event_bus.dispatch(
-            NotificationInAppPushEvent(
+        await self.notification_service.create_notification(
+            NotificationCreate(
                 user_id=user_id,
                 title=title,
                 message=message,
@@ -580,62 +602,27 @@ class AdminService(Commitable):
     # ========== Platform Stats ==========
 
     async def get_platform_stats(self) -> AdminStatsResponse:
-        """Get aggregate platform statistics with smart dashboard metrics."""
-        session = self.user_repository.session
+        """Get high-level platform statistics for the admin dashboard.
 
-        # User metrics
-        total_users_result = await session.execute(select(func.count()).select_from(User))
-        total_users = total_users_result.scalar_one()
+        Computes counts for users, courses, lessons, and audio assets.
+        """
+        # 1. User Stats
+        total_users = await self.user_repository.count()
+        active_users = await self.user_repository.count(is_active=True)
+        total_superusers = await self.user_repository.count(is_superuser=True)
 
-        active_users_result = await session.execute(
-            select(func.count()).select_from(User).where(col(User.is_active) == True)
-        )
-        active_users = active_users_result.scalar_one()
-
-        superusers_result = await session.execute(
-            select(func.count()).select_from(User).where(col(User.is_superuser) == True)
-        )
-        total_superusers = superusers_result.scalar_one()
-
-        # Course metrics
-        total_courses_result = await session.execute(
-            select(func.count()).select_from(Course)
-        )
-        total_courses = total_courses_result.scalar_one()
-
-        active_courses_result = await session.execute(
-            select(func.count()).select_from(Course).where(col(Course.is_public) == True)
-        )
-        total_active_courses = active_courses_result.scalar_one()
-
-        # Lesson metrics
-        total_lessons_result = await session.execute(
-            select(func.count()).select_from(Lesson)
-        )
-        total_lessons = total_lessons_result.scalar_one()
-
-        total_audio_lessons_result = await session.execute(
-            select(func.count()).select_from(LessonAudio)
-        )
-        total_audio_lessons = total_audio_lessons_result.scalar_one()
-
-        # Subscription metrics
-        total_subs_result = await session.execute(
-            select(func.count())
-            .select_from(Subscription)
-            .where(col(Subscription.status) == SubscriptionStatus.ACTIVE)
-        )
-        total_subscriptions = total_subs_result.scalar_one()
+        # 2. Course & Lesson Stats
+        total_courses = await self.course_repository.count()
+        total_lessons = await self.lesson_repository.count()
+        total_audio_lessons = await self.lesson_audio_repository.count()
 
         return AdminStatsResponse(
             total_users=total_users,
             active_users=active_users,
             total_superusers=total_superusers,
             total_courses=total_courses,
-            total_active_courses=total_active_courses,
             total_lessons=total_lessons,
             total_audio_lessons=total_audio_lessons,
-            total_subscriptions=total_subscriptions,
         )
 
     # ========== Maintenance ==========

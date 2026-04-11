@@ -77,7 +77,5 @@ class AdminStatsResponse(BaseModel):
     active_users: int
     total_superusers: int
     total_courses: int
-    total_active_courses: int
     total_lessons: int
     total_audio_lessons: int
-    total_subscriptions: int

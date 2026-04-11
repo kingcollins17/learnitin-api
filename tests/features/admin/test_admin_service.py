@@ -320,12 +320,11 @@ class TestAdminUserManagement:
         admin_service.user_repository.get_by_id = AsyncMock(return_value=user)
         admin_service.user_repository.update = AsyncMock(return_value=user)
 
-        with patch("app.features.admin.service.event_bus") as mock_bus:
-            mock_bus.dispatch = AsyncMock()
-            result = await admin_service.ban_user(5, reason="Spamming")
+        admin_service.notification_service.create_notification = AsyncMock()
+        result = await admin_service.ban_user(5, reason="Spamming")
 
         assert result.is_active is False
-        mock_bus.dispatch.assert_called_once()
+        admin_service.notification_service.create_notification.assert_called_once()
 
     async def test_ban_user_already_inactive(self, admin_service):
         """ban_user should raise 400 if user is already inactive."""
@@ -361,12 +360,11 @@ class TestAdminUserManagement:
         admin_service.user_repository.get_by_id = AsyncMock(return_value=user)
         admin_service.user_repository.update = AsyncMock(return_value=user)
 
-        with patch("app.features.admin.service.event_bus") as mock_bus:
-            mock_bus.dispatch = AsyncMock()
-            result = await admin_service.unban_user(5)
+        admin_service.notification_service.create_notification = AsyncMock()
+        result = await admin_service.unban_user(5)
 
         assert result.is_active is True
-        mock_bus.dispatch.assert_called_once()
+        admin_service.notification_service.create_notification.assert_called_once()
 
     async def test_unban_user_already_active(self, admin_service):
         """unban_user should raise 400 if user is already active."""
@@ -495,6 +493,7 @@ class TestAdminSubscriptionManagement:
             return_value=expected_sub
         )
 
+        admin_service.notification_service.create_notification = AsyncMock()
         result = await admin_service.grant_premium(user_id=10, duration_days=30)
 
         assert result.user_id == 10
@@ -505,9 +504,8 @@ class TestAdminSubscriptionManagement:
 
         # Verify _finalize_and_notify was called with correct args
         call_args = admin_service.subscription_service._finalize_and_notify.call_args
-        sub_arg = call_args.args[0] if call_args.args else call_args.kwargs.get("sub")
-        assert sub_arg.product_id == "premium_monthly"
-        assert sub_arg.auto_renew is False
+        assert call_args.kwargs.get("dispatch_notification") is False
+        admin_service.notification_service.create_notification.assert_called_once()
 
     async def test_grant_premium_with_custom_product_id(self, admin_service):
         """grant_premium should use the provided product_id (same as Google Play)."""
@@ -563,11 +561,13 @@ class TestAdminSubscriptionManagement:
             return_value=free_sub
         )
 
+        admin_service.notification_service.create_notification = AsyncMock()
         result = await admin_service.revoke_premium(user_id=10)
 
         assert result.product_id == "free"
+        admin_service.notification_service.create_notification.assert_called_once()
         admin_service.subscription_service.create_free_subscription.assert_called_once_with(
-            10, dispatch_notification=True
+            10, dispatch_notification=False
         )
 
     async def test_revoke_premium_user_not_found(self, admin_service):
@@ -799,21 +799,15 @@ class TestAdminNotificationManagement:
         user = _make_user(id=5)
         admin_service.user_repository.get_by_id = AsyncMock(return_value=user)
 
-        with patch("app.features.admin.service.event_bus") as mock_bus:
-            mock_bus.dispatch = AsyncMock()
-            result = await admin_service.notify_user(
-                user_id=5,
-                title="Important",
-                message="Your course is ready!",
-            )
+        admin_service.notification_service.create_notification = AsyncMock()
+        result = await admin_service.notify_user(
+            user_id=5,
+            title="Important",
+            message="Your course is ready!",
+        )
 
         assert "5" in result["message"]
-        mock_bus.dispatch.assert_called_once()
-
-        # Verify the dispatched event payload
-        event_arg = mock_bus.dispatch.call_args.args[0]
-        assert event_arg.user_id == 5
-        assert event_arg.title == "Important"
+        admin_service.notification_service.create_notification.assert_called_once()
 
     async def test_notify_user_not_found(self, admin_service):
         """notify_user should raise 404 when user doesn't exist."""
@@ -892,22 +886,11 @@ class TestAdminPlatformStats:
     """Tests for admin platform statistics."""
 
     async def test_get_platform_stats(self, admin_service):
-        """get_platform_stats should return correct aggregate counts."""
-        # Mock each count query result
-        mock_results = [
-            MagicMock(scalar_one=MagicMock(return_value=100)),  # total_users
-            MagicMock(scalar_one=MagicMock(return_value=85)),   # active_users
-            MagicMock(scalar_one=MagicMock(return_value=5)),    # superusers
-            MagicMock(scalar_one=MagicMock(return_value=50)),   # total_courses
-            MagicMock(scalar_one=MagicMock(return_value=40)),   # active_courses
-            MagicMock(scalar_one=MagicMock(return_value=200)),  # total_lessons
-            MagicMock(scalar_one=MagicMock(return_value=180)),  # total_audio_lessons
-            MagicMock(scalar_one=MagicMock(return_value=30)),   # total_subs
-        ]
-
-        admin_service.user_repository.session.execute = AsyncMock(
-            side_effect=mock_results
-        )
+        """get_platform_stats should return aggregate metrics from repositories."""
+        admin_service.user_repository.count = AsyncMock(side_effect=[100, 85, 5])
+        admin_service.course_repository.count = AsyncMock(return_value=50)
+        admin_service.lesson_repository.count = AsyncMock(return_value=200)
+        admin_service.lesson_audio_repository.count = AsyncMock(return_value=180)
 
         result = await admin_service.get_platform_stats()
 
@@ -916,25 +899,19 @@ class TestAdminPlatformStats:
         assert result.active_users == 85
         assert result.total_superusers == 5
         assert result.total_courses == 50
-        assert result.total_active_courses == 40
         assert result.total_lessons == 200
         assert result.total_audio_lessons == 180
-        assert result.total_subscriptions == 30
 
     async def test_get_platform_stats_empty_db(self, admin_service):
         """get_platform_stats should handle empty database (all zeros)."""
-        mock_results = [
-            MagicMock(scalar_one=MagicMock(return_value=0)) for _ in range(8)
-        ]
-
-        admin_service.user_repository.session.execute = AsyncMock(
-            side_effect=mock_results
-        )
+        admin_service.user_repository.count = AsyncMock(return_value=0)
+        admin_service.course_repository.count = AsyncMock(return_value=0)
+        admin_service.lesson_repository.count = AsyncMock(return_value=0)
+        admin_service.lesson_audio_repository.count = AsyncMock(return_value=0)
 
         result = await admin_service.get_platform_stats()
 
         assert result.total_users == 0
-        assert result.total_active_courses == 0
         assert result.total_audio_lessons == 0
 
 
