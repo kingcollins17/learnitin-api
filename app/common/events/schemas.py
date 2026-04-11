@@ -145,6 +145,23 @@ class NotificationInAppPushEvent(AppEvent):
     created_at: Optional[str] = None
 
 
+class NotificationMulticastPushEvent(AppEvent):
+    """Event for sending push notifications to multiple users via FCM multicast.
+
+    More efficient than dispatching individual NotificationInAppPushEvent per user,
+    as it batches FCM sends using send_each_for_multicast().
+
+    If `tokens` are provided, the handler skips the DB lookup entirely.
+    """
+
+    user_ids: List[int] = []
+    tokens: Optional[List[str]] = None
+    title: Optional[str] = None
+    message: Optional[str] = None
+    type: Optional[str] = None
+    data: Optional[Dict[str, Any]] = None
+
+
 # --- Log Events ---
 
 

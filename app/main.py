@@ -15,9 +15,10 @@ from app.features.quiz.router import router as quiz_router
 from app.features.subscriptions.router import router as subscriptions_router
 from app.features.logs.router import router as logs_router
 from app.features.reviews.router import router as reviews_router
-from app.features.notifications.handlers import handle_in_app_push_for_fcm
+from app.features.admin.router import router as admin_router
+from app.features.notifications.handlers import handle_in_app_push_for_fcm, handle_multicast_push_for_fcm
 from app.features.logs.handlers import handle_log_event
-from app.common.events import NotificationInAppPushEvent, LogEvent
+from app.common.events import NotificationInAppPushEvent, NotificationMulticastPushEvent, LogEvent
 
 
 @asynccontextmanager
@@ -30,6 +31,11 @@ async def lifespan(app: FastAPI):
     event_bus.on(
         NotificationInAppPushEvent, handle_in_app_push_for_fcm
     )  # ty:ignore[no-matching-overload]
+
+    # Register multicast notification handler (for admin broadcast/bulk)
+    event_bus.on(
+        NotificationMulticastPushEvent, handle_multicast_push_for_fcm
+    )  # type: ignore
 
     # Register log event handler
     event_bus.on(LogEvent, handle_log_event)  # type: ignore
@@ -130,6 +136,11 @@ app.include_router(
     reviews_router,
     prefix=f"{settings.API_V1_PREFIX}/reviews",
     tags=["Reviews"],
+)
+app.include_router(
+    admin_router,
+    prefix=f"{settings.API_V1_PREFIX}/admin",
+    tags=["Admin"],
 )
 
 

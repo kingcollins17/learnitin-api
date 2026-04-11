@@ -452,3 +452,34 @@ def run_db_maintenance_in_bg(
     maintenance_service: DBMaintenanceService = Depends(get_db_maintenance_service),
 ):
     bg.add_task(maintenance_service.run_all_maintenance)
+
+
+# ============= Admin =============
+from app.features.admin.service import AdminService
+
+
+def get_admin_service(
+    user_repo: UserRepository = Depends(get_user_repository),
+    user_service: UserService = Depends(get_user_service),
+    subscription_service: SubscriptionService = Depends(get_subscription_service),
+    subscription_usage_service: SubscriptionUsageService = Depends(get_subscription_usage_service),
+    notification_service: NotificationService = Depends(get_notification_service),
+    course_repo: CourseRepository = Depends(get_course_repository),
+    lesson_repo: LessonRepository = Depends(get_lesson_repository),
+    audio_repo: LessonAudioRepository = Depends(get_lesson_audio_repo),
+    storage_service: FirebaseStorageService = Depends(get_firebase_storage_service),
+    maintenance_service: DBMaintenanceService = Depends(get_db_maintenance_service),
+) -> AdminService:
+    """Dependency for admin service."""
+    return AdminService(
+        user_repository=user_repo,
+        user_service=user_service,
+        subscription_service=subscription_service,
+        subscription_usage_service=subscription_usage_service,
+        notification_service=notification_service,
+        course_repository=course_repo,
+        lesson_repository=lesson_repo,
+        lesson_audio_repository=audio_repo,
+        storage_service=storage_service,
+        maintenance_service=maintenance_service,
+    )
