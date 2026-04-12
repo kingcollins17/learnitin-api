@@ -231,7 +231,7 @@ class AdminService(Commitable):
                 user_id=user_id,
                 title="Account Suspended",
                 message=ban_message,
-                type="system",
+                type=NotificationType.SYSTEM,
             )
         )
 
@@ -262,7 +262,7 @@ class AdminService(Commitable):
                 user_id=user_id,
                 title="Account Restored",
                 message="Your account has been reactivated. Welcome back!",
-                type="system",
+                type=NotificationType.SYSTEM,
             )
         )
 
@@ -326,7 +326,7 @@ class AdminService(Commitable):
                 user_id=user_id,
                 title="Premium Activated",
                 message=f"You've been granted {duration_days} days of premium access. Enjoy your learning journey!",
-                type="system",
+                type=NotificationType.SYSTEM,
                 data={"product_id": sub.product_id, "subscription_id": sub.id},
             )
         )
@@ -357,7 +357,7 @@ class AdminService(Commitable):
                 user_id=user_id,
                 title="Subscription Updated",
                 message="Your premium access has been revoked. You are now on the Free plan.",
-                type="system",
+                type=NotificationType.SYSTEM,
             )
         )
 
@@ -543,7 +543,7 @@ class AdminService(Commitable):
                 user_id=user_id,
                 title=title,
                 message=message,
-                type=type.value,
+                type=type,
             )
         )
 

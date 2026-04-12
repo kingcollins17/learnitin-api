@@ -2,7 +2,7 @@
 
 from typing import Optional, List
 import json
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from sqlalchemy.orm import selectinload
@@ -14,6 +14,12 @@ class LessonRepository:
 
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    async def count(self) -> int:
+        """Count all lessons."""
+        query = select(func.count()).select_from(Lesson)
+        result = await self.session.execute(query)
+        return result.scalar_one()
 
     async def get_by_id(self, lesson_id: int) -> Optional[Lesson]:
         """Get lesson by ID."""
@@ -171,6 +177,12 @@ class LessonAudioRepository:
 
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    async def count(self) -> int:
+        """Count all lesson audios."""
+        query = select(func.count()).select_from(LessonAudio)
+        result = await self.session.execute(query)
+        return result.scalar_one()
 
     async def get_by_id(self, audio_id: int) -> Optional[LessonAudio]:
         """Get lesson audio by ID."""

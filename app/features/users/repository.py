@@ -1,7 +1,8 @@
 """User repository for database operations."""
 from typing import Optional
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import select, col
 from app.features.users.models import User
 
 
@@ -10,6 +11,19 @@ class UserRepository:
     
     def __init__(self, session: AsyncSession):
         self.session = session
+    
+    async def count(
+        self, is_active: Optional[bool] = None, is_superuser: Optional[bool] = None
+    ) -> int:
+        """Count users with optional filters."""
+        query = select(func.count()).select_from(User)
+        if is_active is not None:
+            query = query.where(col(User.is_active) == is_active)
+        if is_superuser is not None:
+            query = query.where(col(User.is_superuser) == is_superuser)
+        
+        result = await self.session.execute(query)
+        return result.scalar_one()
     
     async def get_by_id(self, user_id: int) -> Optional[User]:
         """Get user by ID."""
