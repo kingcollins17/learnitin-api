@@ -11,6 +11,7 @@ from app.common.responses import ApiResponse, success_response
 from app.features.users.models import User as UserModel
 from app.features.users.schemas import UserResponse
 from app.features.admin.schemas import (
+    AdminCourseListResponse,
     AdminUserListResponse,
     AdminBanUserRequest,
     AdminGrantPremiumRequest,
@@ -259,7 +260,7 @@ async def admin_get_stats(
 # ========== Course Management ==========
 
 
-@router.get("/courses", response_model=ApiResponse)
+@router.get("/courses", response_model=ApiResponse[AdminCourseListResponse])
 async def admin_list_courses(
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(20, ge=1, le=100, description="Items per page"),

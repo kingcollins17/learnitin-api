@@ -4,8 +4,20 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 from app.features.users.schemas import UserResponse
+from app.features.courses.schemas import CourseResponse
 from app.features.notifications.models import NotificationType
 
+
+# ========== Course Management ==========
+
+class AdminCourseListResponse(BaseModel):
+    """Paginated course list response for admin."""
+
+    items: List[CourseResponse]
+    total: int
+    page: int
+    per_page: int
+    total_pages: int
 
 # ========== User Management ==========
 
