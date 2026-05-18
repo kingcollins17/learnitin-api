@@ -1,7 +1,6 @@
 from typing import List, Optional
-from sqlalchemy import desc
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import select, col
 from .models import Log
 from app.common.events import LogLevel
 
@@ -33,7 +32,7 @@ class LogRepository:
             query = query.where(Log.level == level)
         
         result = await self.session.execute(
-            query.order_by(desc(Log.created_at))  # ty:ignore[invalid-argument-type]
+            query.order_by(col(Log.created_at).desc())
             .offset(skip)
             .limit(limit)
         )
