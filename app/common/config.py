@@ -78,9 +78,9 @@ class Settings(BaseSettings):
     def DATABASE_URL(self) -> str:
         """
         Construct async MySQL database URL.
-        Format: mysql+asyncmy://user:password@host:port/database
+        Format: mysql+aiomysql://user:password@host:port/database
         """
-        return f"mysql+asyncmy://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        return f"mysql+aiomysql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     model_config = {
         "case_sensitive": True,

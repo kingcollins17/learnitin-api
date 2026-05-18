@@ -13,7 +13,7 @@ from app.common.database.session import get_async_session
 
 
 # Test database URL - use a separate test database
-TEST_DATABASE_URL = f"mysql+asyncmy://{settings.DB_USER}:{settings.DB_PASSWORD}@{settings.DB_HOST}:{settings.DB_PORT}/test_{settings.DB_NAME}"
+TEST_DATABASE_URL = f"mysql+aiomysql://{settings.DB_USER}:{settings.DB_PASSWORD}@{settings.DB_HOST}:{settings.DB_PORT}/test_{settings.DB_NAME}"
 
 
 @pytest.fixture(scope="session")

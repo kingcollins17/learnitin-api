@@ -3,6 +3,7 @@ from sqlalchemy import desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from .models import Log
+from app.common.events import LogLevel
 
 
 class LogRepository:
@@ -23,11 +24,16 @@ class LogRepository:
         result = await self.session.execute(select(Log).where(Log.id == log_id))
         return result.scalar_one_or_none()
 
-    async def get_all(self, skip: int = 0, limit: int = 100) -> List[Log]:
+    async def get_all(
+        self, skip: int = 0, limit: int = 100, level: Optional[LogLevel] = None
+    ) -> List[Log]:
         """Get all log entries."""
+        query = select(Log)
+        if level:
+            query = query.where(Log.level == level)
+        
         result = await self.session.execute(
-            select(Log)
-            .order_by(desc(Log.created_at))  # ty:ignore[invalid-argument-type]
+            query.order_by(desc(Log.created_at))  # ty:ignore[invalid-argument-type]
             .offset(skip)
             .limit(limit)
         )
@@ -45,3 +51,4 @@ class LogRepository:
         for log in logs:
             await self.session.delete(log)
         await self.session.flush()
+

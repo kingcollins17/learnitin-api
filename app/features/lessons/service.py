@@ -1,5 +1,6 @@
 """Service for managing lessons."""
 import asyncio
+import traceback
 from fastapi import HTTPException, status
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +25,7 @@ from app.services.audio_conversion_service import AudioConversionService
 from app.features.lessons.schemas import CompleteLessonResult
 from app.features.lessons.schemas import UserLessonResponse
 from app.common.service import Commitable
+from app.common.events import LogEvent, LogLevel, event_bus
 
 
 class LessonService(Commitable):
@@ -111,23 +113,37 @@ class LessonService(Commitable):
         Returns:
             Updated lesson with generated content
         """
-        lesson = await self.repository.get_by_id(lesson_id)
-        if not lesson:
-            return None
+        try:
+            lesson = await self.repository.get_by_id(lesson_id)
+            if not lesson:
+                return None
 
-        course = await self.course_repo.get_by_id(lesson.course_id)
-        module = await self.module_repo.get_by_id(lesson.module_id)
+            course = await self.course_repo.get_by_id(lesson.course_id)
+            module = await self.module_repo.get_by_id(lesson.module_id)
 
-        if not course or not module:
-            # Should not happen in consistent DB, but good to handle
-            return None
+            if not course or not module:
+                # Should not happen in consistent DB, but good to handle
+                return None
 
-        content = await self.generation_service.generate_lesson_content(
-            course=course, module=module, lesson=lesson
-        )
+            content = await self.generation_service.generate_lesson_content(
+                course=course, module=module, lesson=lesson
+            )
 
-        lesson.content = content
-        return await self.repository.update(lesson)
+            lesson.content = content
+            return await self.repository.update(lesson)
+        except Exception as e:
+            await event_bus.dispatch(
+                LogEvent(
+                    level=LogLevel.ERROR,
+                    message=f"Error generating content for lesson {lesson_id}: {str(e)}",
+                    data={
+                        "lesson_id": lesson_id,
+                        "error": str(e),
+                        "stacktrace": traceback.format_exc(),
+                    },
+                )
+            )
+            raise
 
     async def _process_part(self, part, lesson_id: int) -> Optional[LessonAudio]:
         for attempt in range(2):  # 0 for initial try, 1 for retry
@@ -162,7 +178,20 @@ class LessonService(Commitable):
                     await asyncio.sleep(1)  # brief pause before retry
                 else:
                     print(f"✗ Failed to generate audio for part {part.order} after retry: {e}")
-                    return None
+                    await event_bus.dispatch(
+                        LogEvent(
+                            level=LogLevel.ERROR,
+                            message=f"Error generating audio for lesson {lesson_id} (part {part.order}): {str(e)}",
+                            data={
+                                "lesson_id": lesson_id,
+                                "part_order": part.order,
+                                "part_title": part.title,
+                                "error": str(e),
+                                "stacktrace": traceback.format_exc(),
+                            },
+                        )
+                    )
+                    raise
 
     async def generate_audio_from_content(self, lesson_id: int) -> List[LessonAudio]:
         """
@@ -182,10 +211,24 @@ class LessonService(Commitable):
             return []
 
         # Generate lecture script parts
-        lecture_parts = await self.lecture_service.generate_lecture_parts(
-            lesson.content,
-            max_parts=4,
-        )
+        try:
+            lecture_parts = await self.lecture_service.generate_lecture_parts(
+                lesson.content,
+                max_parts=4,
+            )
+        except Exception as e:
+            await event_bus.dispatch(
+                LogEvent(
+                    level=LogLevel.ERROR,
+                    message=f"Error generating lecture parts for lesson {lesson_id}: {str(e)}",
+                    data={
+                        "lesson_id": lesson_id,
+                        "error": str(e),
+                        "stacktrace": traceback.format_exc(),
+                    },
+                )
+            )
+            raise
 
         if not lecture_parts:
             return []

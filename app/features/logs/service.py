@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .repository import LogRepository
 from .models import Log
 from .schemas import LogCreate
+from app.common.events import LogLevel
 
 
 class LogService:
@@ -25,9 +26,11 @@ class LogService:
         """Get a log entry by ID."""
         return await self.repository.get_by_id(log_id)
 
-    async def get_logs(self, skip: int = 0, limit: int = 100) -> List[Log]:
+    async def get_logs(
+        self, skip: int = 0, limit: int = 100, level: Optional[LogLevel] = None
+    ) -> List[Log]:
         """Get all log entries."""
-        return await self.repository.get_all(skip, limit)
+        return await self.repository.get_all(skip=skip, limit=limit, level=level)
 
     async def delete_log(self, log_id: int) -> bool:
         """Delete a log entry."""
@@ -40,3 +43,4 @@ class LogService:
     async def clear_logs(self) -> None:
         """Clear all log entries."""
         await self.repository.delete_all()
+

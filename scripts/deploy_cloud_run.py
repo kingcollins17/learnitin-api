@@ -22,8 +22,10 @@ def deploy():
         yaml.dump(filtered_vars, f, default_flow_style=False)
 
     # Construct the gcloud command
+    import shutil
+    gcloud_bin = shutil.which("gcloud") or "gcloud"
     command = [
-        "/Users/zidepeople/google-cloud-sdk/google-cloud-sdk/bin/gcloud",
+        gcloud_bin,
         "run",
         "deploy",
         "learnitin-api",

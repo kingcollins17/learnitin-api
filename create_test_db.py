@@ -1,5 +1,5 @@
 import asyncio
-import asyncmy
+import aiomysql
 from app.common.config import settings
 
 
@@ -7,7 +7,7 @@ async def create_test_db():
     db_name = f"test_{settings.DB_NAME}"
     print(f"Connecting to MySQL to create database: {db_name}...")
 
-    conn = await asyncmy.connect(
+    conn = await aiomysql.connect(
         host=settings.DB_HOST,
         port=settings.DB_PORT,
         user=settings.DB_USER,
