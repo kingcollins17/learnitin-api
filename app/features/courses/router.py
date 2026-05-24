@@ -17,6 +17,7 @@ from app.common.dependencies import (
     get_db_maintenance_service,
     DBMaintenanceService,
     run_db_maintenance_in_bg,
+    get_credit_service,
 )
 from app.features.subscriptions.dependencies import (
     ResourceAccessControl,
@@ -52,6 +53,8 @@ from app.features.courses.service import (
 )
 from app.features.courses.generation_service import CourseGenerationService
 from app.features.courses.tasks import generate_course_image_background
+from app.features.credits.service import CreditService
+from app.features.credits.models import CreditTransactionType
 
 router = APIRouter()
 
@@ -65,6 +68,7 @@ async def generate_courses(
     usage_service: SubscriptionUsageService = Depends(get_subscription_usage_service),
     service: CourseGenerationService = Depends(get_course_generation_service),
     _credits: User = Depends(HasSufficientCredits(credit_requirement=settings.COURSE_GENERATION_COST)),
+    credit_service: CreditService = Depends(get_credit_service),
 ):
     """
     Generate personalized course curricula using AI.
@@ -84,6 +88,16 @@ async def generate_courses(
         # Set the level for each generated course
         for outline in outlines:
             outline.level = request.level
+
+        # Spend credits
+        assert current_user.id
+        await credit_service.spend_credits(
+            user_id=current_user.id,
+            amount=settings.COURSE_GENERATION_COST,
+            transaction_type=CreditTransactionType.COURSE_GENERATION,
+            description=f"Generated course curriculum on topic: {request.topic}",
+        )
+        await credit_service.commit_all()
 
         return success_response(
             data=CourseGenerationResponse(courses=outlines),
