@@ -5,7 +5,8 @@ from typing import List
 import traceback
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.database.session import get_async_session
-from app.common.deps import get_current_active_user, get_current_active_user_optional
+from app.common.deps import get_current_active_user, get_current_active_user_optional, HasSufficientCredits
+from app.common.config import settings
 from app.common.responses import ApiResponse, success_response
 from app.features.users.models import User
 from app.common.dependencies import (
@@ -63,6 +64,7 @@ async def generate_courses(
     subscription: Subscription = Depends(get_user_subscription),
     usage_service: SubscriptionUsageService = Depends(get_subscription_usage_service),
     service: CourseGenerationService = Depends(get_course_generation_service),
+    _credits: User = Depends(HasSufficientCredits(credit_requirement=settings.COURSE_GENERATION_COST)),
 ):
     """
     Generate personalized course curricula using AI.

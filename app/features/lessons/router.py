@@ -21,7 +21,7 @@ from app.common.dependencies import (
     get_module_repository,
 )
 from app.features.notifications.service import NotificationService
-from app.common.deps import get_current_active_user
+from app.common.deps import get_current_active_user, HasSufficientLessonCredits
 from app.common.responses import ApiResponse, success_response
 from app.features.users.models import User
 from app.features.subscriptions.dependencies import (
@@ -237,9 +237,7 @@ async def start_lesson(
     user_lesson_service: UserLessonService = Depends(get_user_lesson_service),
     notification_service: NotificationService = Depends(get_notification_service),
     current_user: User = Depends(get_current_active_user),
-    _access: None = Depends(ResourceAccessControl(SubscriptionResourceType.LESSON)),
-    subscription: Subscription = Depends(get_user_subscription),
-    usage_service: SubscriptionUsageService = Depends(get_subscription_usage_service),
+    _credits: User = Depends(HasSufficientLessonCredits("content")),
 ):
     """
     Start a lesson (create user lesson progress record).
@@ -275,8 +273,8 @@ async def start_lesson(
             lesson_id=lesson_id,
             module_id=lesson.module_id,
             course_id=lesson.course_id,
-            usage_service=usage_service,
-            subscription=subscription,
+            usage_service=None,
+            subscription=None,
         )
         await user_lesson_service.user_lesson_repo.session.commit()
 
@@ -498,9 +496,7 @@ async def unlock_audio(
     lesson_service: LessonService = Depends(get_lesson_service),
     user_lesson_service: UserLessonService = Depends(get_user_lesson_service),
     current_user: User = Depends(get_current_active_user),
-    _access: None = Depends(ResourceAccessControl(SubscriptionResourceType.AUDIO)),
-    subscription: Subscription = Depends(get_user_subscription),
-    usage_service: SubscriptionUsageService = Depends(get_subscription_usage_service),
+    _credits: User = Depends(HasSufficientLessonCredits("audio")),
 ):
     """
     Unlock audio for a lesson.
@@ -522,8 +518,8 @@ async def unlock_audio(
         user_lesson = await user_lesson_service.unlock_audio(
             user_id=current_user.id,
             lesson_id=lesson_id,
-            usage_service=usage_service,
-            subscription=subscription,
+            usage_service=None,
+            subscription=None,
         )
         await user_lesson_service.commit_all()
 

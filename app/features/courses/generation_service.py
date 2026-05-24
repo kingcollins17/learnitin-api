@@ -1,5 +1,5 @@
 """Course generation service using AI."""
-
+import re
 from fastapi import HTTPException, status
 from typing import List, Union
 from pydantic import BaseModel
@@ -40,11 +40,34 @@ class CourseGenerationService:
         Returns:
             List of generated course outlines with modules and lessons
         """
+        # Determine number of weeks and credit cost from duration_preference
+        
+        weeks = 4  # Default to 4 weeks
+        duration_pref = request.duration_preference or "4 weeks"
+        
+        # Try to find a number of weeks in duration preference (e.g. "4 weeks", "5 weeks", "12 weeks")
+        match = re.search(r'(\d+)\s*week', duration_pref, re.IGNORECASE)
+        if match:
+            try:
+                weeks = int(match.group(1))
+            except ValueError:
+                pass
+        # Define free lesson rules depending on course size
+        free_lessons_rule = (
+            "All lessons in the first module (Module 1) must be completely free (set `credit_cost`, `audio_credit_cost`, and `quiz_credit_cost` to 0)."
+            if weeks >= 4 else
+            "The first 3 lessons of the first module must be completely free (set `credit_cost`, `audio_credit_cost`, and `quiz_credit_cost` to 0)."
+        )
+
         # Build the system prompt
-        system_prompt = """You are an expert curriculum designer and educational content creator.
+        system_prompt = f"""You are an expert curriculum designer and educational content creator.
 Your task is to create comprehensive, well-structured course curricula that help learners achieve their goals.
 
 For each course you design:
+- You must structure the course into exactly {weeks} modules (one module for each week of the requested course duration).
+- You must assign a `credit_cost`, `audio_credit_cost`, and `quiz_credit_cost` to every lesson in each module according to these pricing rules:
+  * Free Lessons: {free_lessons_rule}
+  * Paid Lessons (all other lessons): `credit_cost` must be between 20 to 25 credits depending on the complexity of the lesson, `audio_credit_cost` must be between 25 to 30 credits depending on course/lesson complexity, and `quiz_credit_cost` must be between 15 to 20 credits depending on complexity.
 - Break down complex topics into logical, progressive modules
 - Ensure each module builds upon previous knowledge
 - Create specific, actionable learning objectives for each lesson
@@ -65,16 +88,23 @@ Always structure your response as a list of courses, even if generating just one
 Topic: {request.topic}
 Difficulty Level: {request.level}
 Learning Pace: {request.learning_pace}
-Preferred Duration: {request.duration_preference}{learning_goals_text}
+Preferred Duration: {request.duration_preference} (exactly {weeks} weeks){learning_goals_text}
 
 Please generate 1-2 course options that cover this topic effectively. Each course should have:
 - A clear, descriptive title
 - An overview description
-- Multiple modules that progressively build knowledge
+- Exactly {weeks} modules (one module representing each week of study)
 - Each module should contain 3-5 lessons
-- Each lesson should have:
+- Every lesson must have:
   * Specific learning objectives
   * Duration estimates
+  * A `credit_cost` (0 if free, 20-25 if paid)
+  * An `audio_credit_cost` (0 if free, 25-30 if paid)
+  * A `quiz_credit_cost` (0 if free, 15-20 if paid)
+
+Pricing Guidelines for Lessons:
+- {free_lessons_rule}
+- For all other lessons, assign a `credit_cost` between 20 and 25 credits based on lesson complexity, an `audio_credit_cost` between 25 and 30 credits, and a `quiz_credit_cost` between 15 and 20 credits.
 
 Make the courses practical, engaging, and suitable for {request.level} learners."""
 

@@ -16,6 +16,8 @@ from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from app.features.auth.otp_service import OTPService
 from app.common.service import Commitable
+from app.features.credits.service import CreditService
+from app.features.credits.models import CreditTransactionType
 
 
 class AuthService(Commitable):
@@ -25,20 +27,31 @@ class AuthService(Commitable):
         self,
         user_service: UserService,
         otp_service: OTPService,
+        credit_service: CreditService,
     ):
         self.user_service = user_service
         self.otp_service = otp_service
+        self.credit_service = credit_service
 
     async def commit_all(self) -> None:
         """Commit all active sessions in the service's sub-services."""
         await self.user_service.commit_all()
         await self.otp_service.commit_all()
+        await self.credit_service.commit_all()
 
     async def register_user(self, user_data: UserCreate) -> User:
         """
         Register a new user and send verification magic link.
         """
         user = await self.user_service.create_user(user_data)
+
+        # Grant welcome credits
+        await self.credit_service.add_credits(
+            user_id=user.id,  # type: ignore
+            amount=settings.NEW_USER_WELCOME_CREDITS,
+            transaction_type=CreditTransactionType.WELCOME,
+            description="New account welcome credits",
+        )
 
         # Automatically request verification magic link
         await self.otp_service.request_magic_link(
@@ -147,6 +160,14 @@ class AuthService(Commitable):
                 )
 
                 user = await self.user_service.create_user(user_data)
+
+                # Grant welcome credits
+                await self.credit_service.add_credits(
+                    user_id=user.id,  # type: ignore
+                    amount=settings.NEW_USER_WELCOME_CREDITS,
+                    transaction_type=CreditTransactionType.WELCOME,
+                    description="New account welcome credits (Google signup)",
+                )
 
                 # Activate user since they are verified by Google
                 user.is_active = True

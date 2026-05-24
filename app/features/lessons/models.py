@@ -50,6 +50,9 @@ class Lesson(SQLModel, table=True):
         sa_relationship_kwargs={"cascade": "all, delete-orphan"},
     )
     order: int = Field(default=0, nullable=False)  # Order within the module
+    credit_cost: int = Field(default=0)  # Cost for generating content
+    audio_credit_cost: int = Field(default=0)  # Cost for generating audio
+    quiz_credit_cost: int = Field(default=0)  # Cost for generating quiz
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default=None)
 

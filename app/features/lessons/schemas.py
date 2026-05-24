@@ -31,6 +31,9 @@ class LessonBase(BaseModel):
     objectives: Optional[List[str]] = None
     # content is excluded from base to avoid sending it in lists
     order: int = 0
+    credit_cost: int = 0
+    audio_credit_cost: int = 0
+    quiz_credit_cost: int = 0
 
 
 class LessonCreate(LessonBase):
