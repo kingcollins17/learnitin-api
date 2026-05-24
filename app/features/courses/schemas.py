@@ -227,7 +227,7 @@ class ModuleResponse(BaseModel):
 class CourseDetailResponse(CourseResponse):
     """Schema for course detail response including modules."""
 
-    modules: Optional[List[ModuleResponse]] = []
+    modules: Optional[List[ModuleResponse]] = Field(default_factory=list)
 
 
 class UserCourseResponse(BaseModel):
