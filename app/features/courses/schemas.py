@@ -29,7 +29,7 @@ class ModuleOverview(BaseModel):
     objectives: Optional[List[str]] = Field(
         default=None, description="Learning objectives for this module"
     )
-    lessons: List[LessonOverview] = Field(description="List of lessons in this module")
+    lessons: List[LessonOverview] = Field(description="List of lessons in this module", default=[])
 
 
 class CourseOutline(BaseModel):
@@ -218,7 +218,7 @@ class ModuleResponse(BaseModel):
     description: Optional[str] = None
     objectives: Optional[str] = None  # JSON string of objectives list
     order: Optional[int] = None
-    lessons: Optional[List[LessonResponse]] = []
+    lessons: Optional[List[LessonResponse]] = Field(default_factory=list)
 
     class Config:
         from_attributes = True
