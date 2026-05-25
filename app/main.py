@@ -17,6 +17,7 @@ from app.features.logs.router import router as logs_router
 from app.features.reviews.router import router as reviews_router
 from app.features.admin.router import router as admin_router
 from app.features.credits.router import router as credits_router
+from app.features.app_configs.router import router as app_configs_router
 from app.features.notifications.handlers import handle_in_app_push_for_fcm, handle_multicast_push_for_fcm
 from app.features.logs.handlers import handle_log_event
 from app.common.events import NotificationInAppPushEvent, NotificationMulticastPushEvent, LogEvent
@@ -122,6 +123,11 @@ app.include_router(
     quiz_router,
     prefix=f"{settings.API_V1_PREFIX}/quiz",
     tags=["Quizzes"],
+)
+app.include_router(
+    app_configs_router,
+    prefix=f"{settings.API_V1_PREFIX}/app-configs",
+    tags=["App Configurations"],
 )
 app.include_router(
     subscriptions_router,
