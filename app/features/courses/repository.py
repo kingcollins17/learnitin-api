@@ -3,8 +3,10 @@
 from typing import Optional, List
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlmodel import select, col
 from app.features.courses.models import Course, UserCourse, Category, SubCategory
+from app.features.modules.models import Module
 
 
 class CourseRepository:
@@ -21,8 +23,6 @@ class CourseRepository:
 
     async def get_by_id(self, course_id: int) -> Optional[Course]:
         """Get course by ID."""
-        from sqlalchemy.orm import selectinload
-
         result = await self.session.execute(
             select(Course)
             .where(Course.id == course_id)
@@ -32,9 +32,6 @@ class CourseRepository:
 
     async def get_with_modules(self, course_id: int) -> Optional[Course]:
         """Get course by ID with modules and lessons eagerly loaded."""
-        from sqlalchemy.orm import selectinload
-        from app.features.modules.models import Module
-
         result = await self.session.execute(
             select(Course)
             .where(Course.id == course_id)
@@ -50,8 +47,6 @@ class CourseRepository:
         self, user_id: int, skip: int = 0, limit: int = 100
     ) -> List[Course]:
         """Get all courses for a specific user."""
-        from sqlalchemy.orm import selectinload
-
         result = await self.session.execute(
             select(Course)
             .where(Course.user_id == user_id)
@@ -82,8 +77,6 @@ class CourseRepository:
 
     async def get_all(self, skip: int = 0, limit: int = 100) -> List[Course]:
         """Get all courses with pagination."""
-        from sqlalchemy.orm import selectinload
-
         result = await self.session.execute(
             select(Course)
             .options(selectinload(Course.category), selectinload(Course.sub_category))  # type: ignore
@@ -113,8 +106,6 @@ class CourseRepository:
         search: Optional[str] = None,
     ) -> List[Course]:
         """Get all courses with pagination and optional filters."""
-        from sqlalchemy.orm import selectinload
-
         query = select(Course).options(
             selectinload(Course.category), selectinload(Course.sub_category)  # type: ignore
         )
@@ -193,8 +184,6 @@ class UserCourseRepository:
         level: Optional[str] = None,
     ) -> List[UserCourse]:
         """Get all user courses with course details eagerly loaded."""
-        from sqlalchemy.orm import selectinload
-
         query = (
             select(UserCourse)
             .where(UserCourse.user_id == user_id)
@@ -227,8 +216,6 @@ class UserCourseRepository:
 
     async def get_by_id_with_course(self, user_course_id: int) -> Optional[UserCourse]:
         """Get user course by ID with course details eagerly loaded."""
-        from sqlalchemy.orm import selectinload
-
         result = await self.session.execute(
             select(UserCourse)
             .where(UserCourse.id == user_course_id)
@@ -284,17 +271,21 @@ class CategoryRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_all(self, skip: int = 0, limit: int = 100) -> List["Category"]:
+    async def get_all(
+        self, skip: int = 0, limit: int = 100, search: Optional[str] = None
+    ) -> List["Category"]:
         """Get all categories."""
-        from app.features.courses.models import Category
+        query = select(Category)
+        if search:
+            query = query.where(
+                col(Category.name).contains(search) | col(Category.description).contains(search)
+            )
 
-        result = await self.session.execute(select(Category).offset(skip).limit(limit))
+        result = await self.session.execute(query.offset(skip).limit(limit))
         return list(result.scalars().all())
 
     async def get_by_id(self, category_id: int) -> Optional["Category"]:
         """Get category by ID."""
-        from app.features.courses.models import Category
-
         result = await self.session.execute(
             select(Category).where(Category.id == category_id)
         )
@@ -302,8 +293,6 @@ class CategoryRepository:
 
     async def get_by_name(self, name: str) -> Optional["Category"]:
         """Get category by name."""
-        from app.features.courses.models import Category
-
         result = await self.session.execute(
             select(Category).where(Category.name == name)
         )
@@ -337,8 +326,6 @@ class SubCategoryRepository:
 
     async def get_all(self, skip: int = 0, limit: int = 100) -> List["SubCategory"]:
         """Get all sub-categories."""
-        from app.features.courses.models import SubCategory
-
         result = await self.session.execute(
             select(SubCategory).offset(skip).limit(limit)
         )
@@ -346,8 +333,6 @@ class SubCategoryRepository:
 
     async def get_by_id(self, sub_category_id: int) -> Optional["SubCategory"]:
         """Get sub-category by ID."""
-        from app.features.courses.models import SubCategory
-
         result = await self.session.execute(
             select(SubCategory).where(SubCategory.id == sub_category_id)
         )
@@ -357,8 +342,6 @@ class SubCategoryRepository:
         self, category_id: int, skip: int = 0, limit: int = 100
     ) -> List["SubCategory"]:
         """Get sub-categories by category ID."""
-        from app.features.courses.models import SubCategory
-
         result = await self.session.execute(
             select(SubCategory)
             .where(SubCategory.category_id == category_id)
@@ -369,8 +352,6 @@ class SubCategoryRepository:
 
     async def get_by_name(self, name: str) -> Optional["SubCategory"]:
         """Get sub-category by name."""
-        from app.features.courses.models import SubCategory
-
         result = await self.session.execute(
             select(SubCategory).where(SubCategory.name == name)
         )

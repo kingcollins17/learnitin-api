@@ -62,6 +62,7 @@ async def init_db() -> None:
     )  # noqa: F401
     from app.features.credits.models import CreditLedger  # noqa: F401
     from app.features.logs.models import Log  # noqa: F401
+    from app.features.app_configs.models import AppConfig  # noqa: F401
 
     async with engine.begin() as conn:
         # Create all tables

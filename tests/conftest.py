@@ -35,6 +35,7 @@ async def test_engine():
 
     # Import all models to ensure they're registered
     from app.features.users.models import User  # noqa: F401
+    from app.features.app_configs.models import AppConfig  # noqa: F401
 
     # from app.features.otp.models import OTP  # noqa: F401
 

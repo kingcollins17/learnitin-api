@@ -74,6 +74,11 @@ from app.features.subscriptions.service import SubscriptionService
 from app.features.subscriptions.usage_service import SubscriptionUsageService
 from app.features.subscriptions.google_play_service import GooglePlayService
 
+# --- App Configs ---
+from app.features.app_configs.repository import AppConfigRepository
+from app.features.app_configs.service import AppConfigService
+
+
 
 # ========== Repositories ==========
 
@@ -500,3 +505,17 @@ def get_admin_service(
         storage_service=storage_service,
         maintenance_service=maintenance_service,
     )
+
+
+# ============= App Configs =============
+def get_app_config_repository(
+    session: AsyncSession = Depends(get_async_session),
+) -> AppConfigRepository:
+    return AppConfigRepository(session)
+
+
+def get_app_config_service(
+    repo: AppConfigRepository = Depends(get_app_config_repository),
+) -> AppConfigService:
+    return AppConfigService(repo)
+

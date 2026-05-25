@@ -187,3 +187,20 @@ class HasSufficientLessonCredits:
             raise InsufficientCreditsError(balance=balance, required=credit_requirement)
 
         return current_user
+
+
+async def get_active_admin(
+    current_user: User = Depends(get_current_active_user),
+) -> User:
+    """
+    Get the current active superuser/admin.
+
+    Raises:
+        HTTPException: 403 if the user is not an admin.
+    """
+    if not current_user.is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    return current_user

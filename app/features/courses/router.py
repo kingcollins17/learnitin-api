@@ -1,11 +1,11 @@
 """Course API endpoints."""
 
 from fastapi import APIRouter, Depends, status, HTTPException, Query, BackgroundTasks
-from typing import List
+from typing import List, Optional
 import traceback
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.database.session import get_async_session
-from app.common.deps import get_current_active_user, get_current_active_user_optional, HasSufficientCredits
+from app.common.deps import get_current_active_user, get_current_active_user_optional, HasSufficientCredits, get_active_admin
 from app.common.config import settings
 from app.common.responses import ApiResponse, success_response
 from app.features.users.models import User
@@ -443,12 +443,12 @@ async def get_user_course_detail(
 async def create_category(
     category_data: CategoryCreate,
     service: CategoryService = Depends(get_category_service),
-    current_user: User = Depends(get_current_active_user),
+    admin: User = Depends(get_active_admin),
 ):
     """
     Create a new category.
 
-    **Authentication required.**
+    **Admin only.**
     """
     try:
         category = await service.create_category(category_data.model_dump())
@@ -471,6 +471,7 @@ async def create_category(
 async def get_categories(
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     per_page: int = Query(100, ge=1, le=100, description="Items per page"),
+    search: Optional[str] = Query(None, description="Search categories by name or description"),
     service: CategoryService = Depends(get_category_service),
 ):
     """
@@ -479,7 +480,7 @@ async def get_categories(
     **No authentication required.**
     """
     try:
-        categories = await service.get_categories(page=page, per_page=per_page)
+        categories = await service.get_categories(page=page, per_page=per_page, search=search)
 
         return success_response(
             data=categories,
@@ -498,12 +499,12 @@ async def update_category(
     category_id: int,
     category_update: CategoryUpdate,
     service: CategoryService = Depends(get_category_service),
-    current_user: User = Depends(get_current_active_user),
+    admin: User = Depends(get_active_admin),
 ):
     """
     Update a category.
 
-    **Authentication required.**
+    **Admin only.**
     """
     try:
         updated_category = await service.update_category(
@@ -529,12 +530,12 @@ async def update_category(
 async def delete_category(
     category_id: int,
     service: CategoryService = Depends(get_category_service),
-    current_user: User = Depends(get_current_active_user),
+    admin: User = Depends(get_active_admin),
 ):
     """
     Delete a category.
 
-    **Authentication required.**
+    **Admin only.**
     """
     try:
         await service.delete_category(category_id)
