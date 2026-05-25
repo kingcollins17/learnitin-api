@@ -6,7 +6,7 @@ from typing import Optional
 import traceback
 
 from app.common.database.session import get_async_session
-from app.common.deps import get_current_active_user
+from app.common.deps import get_current_active_user, HasSufficientLessonCredits
 from app.common.responses import ApiResponse, success_response
 from app.features.users.models import User
 from app.features.quiz.schemas import QuizResponse
@@ -89,6 +89,7 @@ async def generate_quiz(
     current_user: User = Depends(get_current_active_user),
     service: QuizService = Depends(get_quiz_service),
     lesson_service: LessonService = Depends(get_lesson_service),
+    _credits: User = Depends(HasSufficientLessonCredits("quiz")),
 ):
     """
     Manually trigger AI generation for a lesson quiz.

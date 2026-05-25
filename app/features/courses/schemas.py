@@ -15,6 +15,9 @@ class LessonOverview(BaseModel):
     duration: str = Field(
         description="Estimated duration (e.g., '30 minutes', '1 hour')"
     )
+    credit_cost: int = Field(default=0, description="The credit cost to generate this lesson's content")
+    audio_credit_cost: int = Field(default=0, description="The credit cost to generate this lesson's audio")
+    quiz_credit_cost: int = Field(default=0, description="The credit cost to generate this lesson's quiz")
 
 
 class ModuleOverview(BaseModel):
@@ -199,6 +202,9 @@ class LessonResponse(BaseModel):
     description: Optional[str] = None
     objectives: Optional[str] = None  # JSON string of objectives list
     order: Optional[int] = None
+    credit_cost: int = 0
+    audio_credit_cost: int = 0
+    quiz_credit_cost: int = 0
 
     class Config:
         from_attributes = True
@@ -221,7 +227,7 @@ class ModuleResponse(BaseModel):
 class CourseDetailResponse(CourseResponse):
     """Schema for course detail response including modules."""
 
-    modules: Optional[List[ModuleResponse]] = []
+    modules: Optional[List[ModuleResponse]] = Field(default_factory=list)
 
 
 class UserCourseResponse(BaseModel):

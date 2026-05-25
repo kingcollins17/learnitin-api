@@ -3,7 +3,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from app.features.otp.models import OTP
+from app.features.auth.otp_models import OTP
 from app.common.config import settings
 from unittest.mock import patch, MagicMock
 
@@ -203,7 +203,7 @@ async def test_cleanup_expired_otps(
 
     # 3. Call cleanup via repository (since we don't have an endpoint for it yet, but service has method)
     # Let's instantiate service or repo
-    from app.features.otp.repository import OTPRepository
+    from app.features.auth.otp_repository import OTPRepository
 
     repo = OTPRepository(db_session)
     count = await repo.delete_expired_otps()

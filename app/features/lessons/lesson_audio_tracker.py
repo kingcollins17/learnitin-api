@@ -1,18 +1,18 @@
 from typing import Dict, Optional
 
 
-class LessonAudioTracker:
+class LessonAudioBackgroundGenerationTracker:
     """
     Singleton service to track lessons currently undergoing audio generation.
     Used to prevent duplicate background tasks for the same lesson.
     """
 
-    _instance: Optional["LessonAudioTracker"] = None
+    _instance: Optional["LessonAudioBackgroundGenerationTracker"] = None
     _in_progress: Dict[int, int] = {}
 
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super(LessonAudioTracker, cls).__new__(cls)
+            cls._instance = super(LessonAudioBackgroundGenerationTracker, cls).__new__(cls)
         return cls._instance
 
     def start_tracking(self, lesson_id: int, user_id: int) -> bool:
@@ -39,4 +39,4 @@ class LessonAudioTracker:
 
 
 # Global singleton instance
-audio_tracker = LessonAudioTracker()
+audio_tracker = LessonAudioBackgroundGenerationTracker()

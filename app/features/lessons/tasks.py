@@ -20,11 +20,15 @@ from app.features.notifications.schemas import NotificationCreate
 from app.features.notifications.models import NotificationType
 from app.features.courses.repository import CourseRepository
 from app.features.modules.repository import ModuleRepository
+from app.features.credits.repository import CreditRepository
+from app.features.credits.service import CreditService
+from app.features.credits.models import CreditTransactionType
 
 
 async def generate_audio_background(
     lesson_id: int,
     lesson_service: LessonService,
+    credit_service: CreditService,
     user_id: Optional[int] = None,
 ):
     """
@@ -80,6 +84,18 @@ async def generate_audio_background(
             f"Audio generation completed for lesson {lesson_id}: {len(created_audios)} parts created"
         )
 
+        if created_audios and user_id:
+
+            await credit_service.spend_credits(
+                user_id=user_id,
+                amount=lesson.audio_credit_cost,
+                transaction_type=CreditTransactionType.AUDIO_GENERATION,
+                description=f"Generated audio for lesson: {lesson.title}",
+                reference_id=str(lesson_id),
+                reference_type="lesson",
+            )
+            await credit_service.commit_all()
+
         # Publish completion events
         if user_id:
             # 1. Dispatch AudioReadyEvent
@@ -127,6 +143,7 @@ async def generate_lesson_content_background(
     lesson_id: int,
     lesson_service: LessonService,
     notification_service: NotificationService,
+    credit_service: CreditService,
     user_id: int,
     course_id: int,
     module_id: int,
@@ -173,6 +190,18 @@ async def generate_lesson_content_background(
         )
         await lesson_service.repository.session.commit()
         print(f"Content generated and saved for lesson {lesson_id}")
+
+        # Spend credits
+
+        await credit_service.spend_credits(
+            user_id=user_id,
+            amount=lesson.credit_cost,
+            transaction_type=CreditTransactionType.LESSON_UNLOCK,
+            description=f"Unlocked lesson content: {lesson.title}",
+            reference_id=str(lesson_id),
+            reference_type="lesson",
+        )
+        await credit_service.commit_all()
 
         # Dispatch in-app notification
         await notification_service.create_notification(

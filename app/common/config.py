@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     FREE_PLAN_LESSONS_LIMIT: int = Field(default=10)
     FREE_PLAN_AUDIO_LESSONS_LIMIT: int = Field(default=5)
 
+    # Credits
+    NEW_USER_WELCOME_CREDITS: int = Field(default=100)
+
+    COURSE_GENERATION_COST: int = Field(default=10)
+
     # Subscription Grace Period (days after expiry before demotion to free)
     SUBSCRIPTION_GRACE_PERIOD_DAYS: int = Field(default=3)
 

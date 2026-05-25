@@ -546,11 +546,11 @@ class CategoryService(Commitable):
         return await self.category_repository.create(category)
 
     async def get_categories(
-        self, page: int = 1, per_page: int = 100
+        self, page: int = 1, per_page: int = 100, search: Optional[str] = None
     ) -> List[Category]:
         """Get all categories."""
         skip = (page - 1) * per_page
-        return await self.category_repository.get_all(skip=skip, limit=per_page)
+        return await self.category_repository.get_all(skip=skip, limit=per_page, search=search)
 
     async def update_category(
         self, category_id: int, category_update: dict

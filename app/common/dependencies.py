@@ -63,12 +63,21 @@ from app.features.lessons.service import LessonService, UserLessonService
 from app.features.notifications.repository import NotificationRepository
 from app.features.notifications.service import NotificationService
 
+# --- Credits ---
+from app.features.credits.repository import CreditRepository
+from app.features.credits.service import CreditService
+
 # --- Subscriptions ---
 from app.features.subscriptions.repository import SubscriptionRepository
 from app.features.subscriptions.usage_repository import SubscriptionUsageRepository
 from app.features.subscriptions.service import SubscriptionService
 from app.features.subscriptions.usage_service import SubscriptionUsageService
 from app.features.subscriptions.google_play_service import GooglePlayService
+
+# --- App Configs ---
+from app.features.app_configs.repository import AppConfigRepository
+from app.features.app_configs.service import AppConfigService
+
 
 
 # ========== Repositories ==========
@@ -151,6 +160,12 @@ def get_notification_repository(
     session: AsyncSession = Depends(get_async_session),
 ) -> NotificationRepository:
     return NotificationRepository(session)
+
+
+def get_credit_repository(
+    session: AsyncSession = Depends(get_async_session),
+) -> CreditRepository:
+    return CreditRepository(session)
 
 
 def get_subscription_repository(
@@ -254,6 +269,12 @@ def get_fcm_service() -> FirebaseFCMService:
 # ========== Normal Services ==========
 
 
+def get_credit_service(
+    repo: CreditRepository = Depends(get_credit_repository),
+) -> CreditService:
+    return CreditService(repo)
+
+
 def get_user_service(
     repo: UserRepository = Depends(get_user_repository),
 ) -> UserService:
@@ -277,8 +298,9 @@ def get_otp_service(
 def get_auth_service(
     user_service: UserService = Depends(get_user_service),
     otp_service: OTPService = Depends(get_otp_service),
+    credit_service: CreditService = Depends(get_credit_service),
 ) -> AuthService:
-    return AuthService(user_service, otp_service)
+    return AuthService(user_service, otp_service, credit_service)
 
 
 def get_review_service(
@@ -483,3 +505,17 @@ def get_admin_service(
         storage_service=storage_service,
         maintenance_service=maintenance_service,
     )
+
+
+# ============= App Configs =============
+def get_app_config_repository(
+    session: AsyncSession = Depends(get_async_session),
+) -> AppConfigRepository:
+    return AppConfigRepository(session)
+
+
+def get_app_config_service(
+    repo: AppConfigRepository = Depends(get_app_config_repository),
+) -> AppConfigService:
+    return AppConfigService(repo)
+
