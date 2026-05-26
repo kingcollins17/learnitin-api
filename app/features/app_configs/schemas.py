@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Any, Dict, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, AliasChoices
 
 
 class AppConfigBase(BaseModel):
@@ -11,7 +11,10 @@ class AppConfigBase(BaseModel):
     key: str = Field(..., description="Unique settings key")
     value: str = Field(..., description="Configuration value")
     metadata_json: Optional[Dict[str, Any]] = Field(
-        default=None, description="Optional metadata fields", alias="metadata"
+        default=None,
+        description="Optional metadata fields",
+        validation_alias=AliasChoices("metadata_json", "metadata"),
+        serialization_alias="metadata",
     )
 
     class Config:
@@ -32,7 +35,10 @@ class AppConfigUpdate(BaseModel):
     key: Optional[str] = Field(None, description="Unique settings key")
     value: Optional[str] = Field(None, description="Configuration value")
     metadata_json: Optional[Dict[str, Any]] = Field(
-        None, description="Optional metadata fields", alias="metadata"
+        None,
+        description="Optional metadata fields",
+        validation_alias=AliasChoices("metadata_json", "metadata"),
+        serialization_alias="metadata",
     )
 
     class Config:

@@ -6,30 +6,31 @@ Provides a streamlined API with four core methods:
     - create: Append a new ledger entry
     - delete: Remove a ledger entry (admin use only)
 
-Balance computation uses SQL SUM with TTL caching via cachetools
+Balance computation uses SQL SUM with TTL caching via CacheService
 to avoid recalculating on every request.
 """
 
 from typing import Optional
-from cachetools import TTLCache
-from sqlalchemy import func, text
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select, col
+from app.common.cache import cache_service
 from .models import CreditLedger, CreditTransactionType
 
 
-# Module-level TTL cache for credit balances.
+# Register the credit balances cache at module load.
 # Key: user_id (int), Value: balance (int)
 # TTL of 30 seconds balances freshness vs DB load.
-_balance_cache: TTLCache[int, int] = TTLCache(maxsize=4096, ttl=30)
+BALANCE_CACHE = "credit_balances"
+cache_service.register(BALANCE_CACHE, maxsize=4096, ttl=30)
 
 
 class CreditRepository:
     """Repository for credit ledger database operations.
 
-    Uses a module-level TTL cache for balance lookups. The cache is
-    automatically invalidated on create/delete operations for the
-    affected user_id.
+    Uses the CacheService's "credit_balances" namespace for balance lookups.
+    The cache is automatically invalidated on create/delete operations
+    for the affected user_id.
     """
 
     def __init__(self, session: AsyncSession):
@@ -50,8 +51,10 @@ class CreditRepository:
         Returns:
             Current credit balance (can be zero, never negative if system is correct).
         """
-        if use_cache and user_id in _balance_cache:
-            return _balance_cache[user_id]
+        if use_cache:
+            cached = cache_service.get(BALANCE_CACHE, user_id)
+            if cached is not None:
+                return cached
 
         result = await self.session.execute(
             select(func.coalesce(func.sum(CreditLedger.amount), 0)).where(
@@ -59,7 +62,7 @@ class CreditRepository:
             )
         )
         balance: int = result.scalar_one()
-        _balance_cache[user_id] = balance
+        cache_service.set(BALANCE_CACHE, user_id, balance)
         return balance
 
     async def get_balance_for_update(self, user_id: int) -> int:
@@ -214,7 +217,7 @@ class CreditRepository:
         await self.session.refresh(entry)
 
         # Invalidate balance cache for this user
-        _balance_cache.pop(entry.user_id, None)
+        cache_service.delete(BALANCE_CACHE, entry.user_id)
 
         return entry
 
@@ -232,7 +235,7 @@ class CreditRepository:
         await self.session.flush()
 
         # Invalidate balance cache for this user
-        _balance_cache.pop(user_id, None)
+        cache_service.delete(BALANCE_CACHE, user_id)
 
     @staticmethod
     def invalidate_cache(user_id: int) -> None:
@@ -244,4 +247,4 @@ class CreditRepository:
         Args:
             user_id: The user whose cache should be invalidated.
         """
-        _balance_cache.pop(user_id, None)
+        cache_service.delete(BALANCE_CACHE, user_id)
