@@ -143,6 +143,19 @@ async def create_course(
         )
 
 
+@router.get("/credit-cost", response_model=ApiResponse[dict])
+async def get_course_credit_cost():
+    """
+    Get the credit cost required to generate a new course.
+    response.data - ```{"credit_cost": 10}```
+    **No authentication required.**
+    """
+    return success_response(
+        data={"credit_cost": settings.COURSE_GENERATION_COST},
+        details="Course credit cost retrieved successfully",
+    )
+
+
 @router.patch("/{course_id}", response_model=ApiResponse[CourseResponse])
 async def update_course(
     course_id: int,
