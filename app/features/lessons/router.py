@@ -20,7 +20,9 @@ from app.common.dependencies import (
     get_course_repository,
     get_module_repository,
     get_credit_service,
+    get_streak_service,
 )
+from app.features.streaks.service import StreakService
 from app.features.notifications.service import NotificationService
 from app.common.deps import get_current_active_user, HasSufficientLessonCredits
 from app.common.responses import ApiResponse, success_response
@@ -237,9 +239,11 @@ async def update_lesson(
 async def start_lesson(
     lesson_id: int,
     background_tasks: BackgroundTasks,
+    timezone: str = Query("UTC", description="User local timezone"),
     lesson_service: LessonService = Depends(get_lesson_service),
     user_lesson_service: UserLessonService = Depends(get_user_lesson_service),
     notification_service: NotificationService = Depends(get_notification_service),
+    streak_service: StreakService = Depends(get_streak_service),
     current_user: User = Depends(get_current_active_user),
     _credits: User = Depends(HasSufficientLessonCredits("content")),
     credit_service: CreditService = Depends(get_credit_service),
@@ -282,6 +286,16 @@ async def start_lesson(
             subscription=None,
         )
         await user_lesson_service.user_lesson_repo.session.commit()
+
+        # Log streak progress event
+        await streak_service.log_progress_event(
+            user_id=current_user.id,
+            course_id=lesson.course_id,
+            lesson_id=lesson_id,
+            event_type="lesson_started",
+            timezone_str=timezone,
+        )
+        await streak_service.commit_all()
 
         # 3. Check and handle content availability
         is_content_available = True
@@ -580,7 +594,9 @@ async def unlock_audio(
 )
 async def complete_quiz(
     lesson_id: int = Query(..., description="ID of the lesson"),
+    timezone: str = Query("UTC", description="User local timezone"),
     service: UserLessonService = Depends(get_user_lesson_service),
+    streak_service: StreakService = Depends(get_streak_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -594,6 +610,16 @@ async def complete_quiz(
             user_id=current_user.id,
             lesson_id=lesson_id,
         )
+
+        # Log streak progress event
+        await streak_service.log_progress_event(
+            user_id=current_user.id,
+            course_id=user_lesson.course_id,
+            lesson_id=lesson_id,
+            event_type="quiz_completed",
+            timezone_str=timezone,
+        )
+        await streak_service.commit_all()
 
         return success_response(
             data=user_lesson,
@@ -614,7 +640,9 @@ async def complete_quiz(
 )
 async def complete_lesson(
     lesson_id: int = Query(..., description="ID of the lesson"),
+    timezone: str = Query("UTC", description="User local timezone"),
     service: UserLessonService = Depends(get_user_lesson_service),
+    streak_service: StreakService = Depends(get_streak_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -635,6 +663,15 @@ async def complete_lesson(
             has_completed_course=result.has_completed_course,
         )
 
+        # Log streak progress event
+        await streak_service.log_progress_event(
+            user_id=current_user.id,
+            course_id=result.user_lesson.course_id,
+            lesson_id=lesson_id,
+            event_type="lesson_completed",
+            timezone_str=timezone,
+        )
+
         # Dispatch event if course completed
         if result.has_completed_course:
             await event_bus.dispatch(
@@ -643,6 +680,8 @@ async def complete_lesson(
                     user_id=current_user.id,
                 )
             )
+
+        await streak_service.commit_all()
 
         return success_response(
             data=response_data,
@@ -663,8 +702,10 @@ async def complete_lesson(
 )
 async def get_lesson_audios(
     lesson_id: int,
+    background_tasks: BackgroundTasks,
     service: LessonService = Depends(get_lesson_service),
     current_user: User = Depends(get_current_active_user),
+    credit_service: CreditService = Depends(get_credit_service),
 ):
     """
     Get all audio segments for a lesson.
@@ -681,9 +722,27 @@ async def get_lesson_audios(
             user_id=current_user.id, lesson_id=lesson_id
         )
 
+        message = f"Retrieved {len(audios)} audio segment(s)"
+
+        if not audios:
+            if not audio_tracker.is_in_progress(lesson_id):
+                lesson = await service.get_lesson_by_id(lesson_id)
+                if lesson and lesson.content:
+                    if audio_tracker.start_tracking(lesson_id, current_user.id):
+                        background_tasks.add_task(
+                            generate_audio_background,
+                            lesson_id=lesson_id,
+                            lesson_service=service,
+                            credit_service=credit_service,
+                            user_id=current_user.id,
+                        )
+                        message = "Audio is being generated. Please check back shortly."
+            else:
+                message = "Audio generation is already in progress. Please check back shortly."
+
         return success_response(
             data=audios,
-            details=f"Retrieved {len(audios)} audio segment(s)",
+            details=message,
         )
     except HTTPException:
         raise

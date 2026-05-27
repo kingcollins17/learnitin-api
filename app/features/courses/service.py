@@ -210,8 +210,17 @@ class CourseService(Commitable):
                 detail="User is already enrolled in this course",
             )
 
+        # Fetch total lessons for the course
+        lessons = await self.lesson_repository.get_by_course_id(course_id, limit=9999)
+        total_lessons = len(lessons)
+
         # Create enrollment
-        user_course = UserCourse(user_id=user_id, course_id=course_id)
+        user_course = UserCourse(
+            user_id=user_id,
+            course_id=course_id,
+            total_lessons=total_lessons,
+            completed_lessons=0
+        )
         user_course = await self.user_course_repository.create(user_course)
 
         # Increment total_enrollees

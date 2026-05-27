@@ -718,6 +718,16 @@ class UserLessonService(Commitable):
                 detail="Lesson not found",
             )
 
+        # Check if already completed to prevent duplicate counting
+        existing_user_lesson = await self.user_lesson_repo.get_by_user_and_lesson(
+            user_id=user_id, lesson_id=lesson_id
+        )
+        is_already_completed = (
+            existing_user_lesson.status == ProgressStatus.COMPLETED
+            if existing_user_lesson
+            else False
+        )
+
         user_lesson = await self.update_user_lesson(
             user_id=user_id,
             lesson_id=lesson_id,
@@ -733,6 +743,12 @@ class UserLessonService(Commitable):
         user_course = await self.user_course_repo.get_by_user_and_course(
             user_id=user_id, course_id=lesson.course_id
         )
+
+        if user_course and not is_already_completed:
+            user_course.completed_lessons += 1
+            user_course.updated_at = datetime.now(timezone.utc)
+            await self.user_course_repo.update(user_course)
+
         has_completed_course = (
             user_course.status == ProgressStatus.COMPLETED if user_course else False
         )
