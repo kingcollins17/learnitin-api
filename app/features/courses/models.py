@@ -135,6 +135,8 @@ class UserCourse(SQLModel, table=True):
     current_module_id: Optional[int] = Field(default=None, nullable=True)
     current_lesson_id: Optional[int] = Field(default=None, nullable=True)
     completed_modules: int = Field(default=0)
+    total_lessons: int = Field(default=0)
+    completed_lessons: int = Field(default=0)
     status: ProgressStatus = Field(default=ProgressStatus.IN_PROGRESS)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default=None)

@@ -74,9 +74,10 @@ from app.features.subscriptions.service import SubscriptionService
 from app.features.subscriptions.usage_service import SubscriptionUsageService
 from app.features.subscriptions.google_play_service import GooglePlayService
 
-# --- App Configs ---
 from app.features.app_configs.repository import AppConfigRepository
 from app.features.app_configs.service import AppConfigService
+from app.features.streaks.repository import StreakRepository
+from app.features.streaks.service import StreakService
 
 
 
@@ -518,4 +519,19 @@ def get_app_config_service(
     repo: AppConfigRepository = Depends(get_app_config_repository),
 ) -> AppConfigService:
     return AppConfigService(repo)
+
+
+# ============= Streaks =============
+def get_streak_repository(
+    session: AsyncSession = Depends(get_async_session),
+) -> StreakRepository:
+    return StreakRepository(session)
+
+
+def get_streak_service(
+    repo: StreakRepository = Depends(get_streak_repository),
+    user_course_repo: UserCourseRepository = Depends(get_user_course_repository),
+    course_repo: CourseRepository = Depends(get_course_repository),
+) -> StreakService:
+    return StreakService(repo, user_course_repo, course_repo)
 
