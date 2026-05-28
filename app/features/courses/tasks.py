@@ -1,6 +1,7 @@
 import traceback
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.features.courses.service import CourseService
+from app.common.events import LogEvent, LogLevel, event_bus
 
 
 async def generate_course_image_background(
@@ -28,3 +29,14 @@ async def generate_course_image_background(
     except Exception as e:
         traceback.print_exc()
         print(f"Failed to generate image for course {course_id}: {str(e)}")
+        await event_bus.dispatch(
+            LogEvent(
+                level=LogLevel.ERROR,
+                message=f"Failed to generate image for course {course_id}: {str(e)}",
+                data={
+                    "course_id": course_id,
+                    "error": str(e),
+                    "stacktrace": traceback.format_exc(),
+                },
+            )
+        )

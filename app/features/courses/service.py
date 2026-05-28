@@ -130,6 +130,9 @@ class CourseService(Commitable):
                     description=f"Duration: {lesson_data.duration}",
                     objectives=json.dumps(lesson_data.objectives),
                     order=j,
+                    credit_cost=lesson_data.credit_cost,
+                    audio_credit_cost=lesson_data.audio_credit_cost,
+                    quiz_credit_cost=lesson_data.quiz_credit_cost,
                 )
                 await self.lesson_repository.create(lesson)
 
