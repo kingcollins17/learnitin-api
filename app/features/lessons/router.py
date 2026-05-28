@@ -282,8 +282,7 @@ async def start_lesson(
             lesson_id=lesson_id,
             module_id=lesson.module_id,
             course_id=lesson.course_id,
-            usage_service=None,
-            subscription=None,
+           
         )
         await user_lesson_service.user_lesson_repo.session.commit()
 
