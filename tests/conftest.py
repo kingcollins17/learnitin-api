@@ -37,6 +37,7 @@ async def test_engine():
     from app.features.users.models import User  # noqa: F401
     from app.features.app_configs.models import AppConfig  # noqa: F401
     from app.features.streaks.models import CourseProgressEvent, CourseDailyStreak  # noqa: F401
+    from app.features.subscriptions.models import Subscription, SubscriptionUsage  # noqa: F401
 
     # from app.features.otp.models import OTP  # noqa: F401
 
