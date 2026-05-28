@@ -423,8 +423,6 @@ class UserLessonService(Commitable):
         lesson_id: int,
         module_id: int,
         course_id: int,
-        usage_service: Optional[SubscriptionUsageService] = None,
-        subscription: Optional[Subscription] = None,
     ) -> UserLesson:
         """
         Start a lesson for a user (create user lesson record).
@@ -514,11 +512,7 @@ class UserLessonService(Commitable):
             user_course.updated_at = datetime.now(timezone.utc)
             await self.user_course_repo.update(user_course)
 
-        # Increment usage if service and subscription are provided
-        if usage_service and subscription:
-            await usage_service.increment_usage(
-                subscription, SubscriptionResourceType.LESSON
-            )
+
 
         return created_user_lesson
 
@@ -651,8 +645,6 @@ class UserLessonService(Commitable):
         self,
         user_id: int,
         lesson_id: int,
-        usage_service: Optional[SubscriptionUsageService] = None,
-        subscription: Optional[Subscription] = None,
     ) -> UserLesson:
         """
         Unlock audio for a lesson.
@@ -672,11 +664,7 @@ class UserLessonService(Commitable):
             update_data={"is_audio_unlocked": True},
         )
 
-        # Increment usage if service and subscription are provided
-        if usage_service and subscription:
-            await usage_service.increment_usage(
-                subscription, SubscriptionResourceType.AUDIO
-            )
+
 
         return user_lesson
 

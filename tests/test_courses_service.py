@@ -1,7 +1,7 @@
-"""Tests for course service."""
+"""Tests for course generation service."""
 import pytest
-from unittest.mock import AsyncMock, patch
-from app.features.courses.service import CourseService
+from unittest.mock import AsyncMock, patch, MagicMock
+from app.features.courses.generation_service import CourseGenerationService
 from app.features.courses.schemas import (
     CourseGenerationRequest,
     CourseOutline,
@@ -11,17 +11,17 @@ from app.features.courses.schemas import (
 
 
 class TestCourseService:
-    """Test suite for course service."""
+    """Test suite for course generation service."""
     
     @pytest.fixture
-    def mock_session(self):
-        """Create a mock database session."""
+    def mock_ai_service(self):
+        """Create a mock AI service."""
         return AsyncMock()
     
     @pytest.fixture
-    def service(self, mock_session):
-        """Create a course service instance."""
-        return CourseService(mock_session)
+    def service(self, mock_ai_service):
+        """Create a course generation service instance."""
+        return CourseGenerationService(mock_ai_service)
     
     @pytest.mark.asyncio
     async def test_generate_courses_basic(self, service):
@@ -47,7 +47,10 @@ class TestCourseService:
                             LessonOverview(
                                 title="Variables and Data Types",
                                 objectives=["Understand variables", "Learn data types"],
-                                duration="2 hours"
+                                duration="2 hours",
+                                credit_cost=0,
+                                audio_credit_cost=0,
+                                quiz_credit_cost=0,
                             )
                         ]
                     )
@@ -55,7 +58,8 @@ class TestCourseService:
             )
         ]
         
-        with patch('app.features.courses.service.langchain_service.invoke') as mock_invoke:
+        # We patch the ai_service invoke call directly
+        with patch.object(service.ai_service, 'invoke', new_callable=AsyncMock) as mock_invoke:
             # Create a mock response object
             class MockResponse:
                 courses = mock_courses
@@ -96,7 +100,10 @@ class TestCourseService:
                             LessonOverview(
                                 title="Introduction to Pandas",
                                 objectives=["Learn DataFrame basics"],
-                                duration="3 hours"
+                                duration="3 hours",
+                                credit_cost=20,
+                                audio_credit_cost=25,
+                                quiz_credit_cost=15,
                             )
                         ]
                     )
@@ -104,7 +111,7 @@ class TestCourseService:
             )
         ]
         
-        with patch('app.features.courses.service.langchain_service.invoke') as mock_invoke:
+        with patch.object(service.ai_service, 'invoke', new_callable=AsyncMock) as mock_invoke:
             class MockResponse:
                 courses = mock_courses
             
