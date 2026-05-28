@@ -11,10 +11,11 @@ async def test_create_course_saves_credit_costs(
     client: AsyncClient,
     db_session: AsyncSession,
     auth_headers: dict,
+    test_user_data: dict,
 ):
     """Test that creating a course from an outline saves the lesson credit costs to the database."""
     # Find the current test user
-    username = "testuser"
+    username = test_user_data["username"]
     result = await db_session.execute(select(User).where(User.username == username))
     user = result.scalars().first()
     assert user is not None
