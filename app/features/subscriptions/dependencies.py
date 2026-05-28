@@ -147,36 +147,5 @@ class ResourceAccessControl:
         Check if the user has reached their monthly usage limit for the resource.
         Only applies to users on the free plan.
         """
-        # Premium users (active subscriptions that aren't the free plan) have unlimited access
-        if not service.is_free_plan(subscription):
-            return
-
-        if not subscription.id:
-            # Should not happen with current app architecture, but good to be safe
-            return
-
-        # Get current usage via usage service
-        usage = await usage_service.get_usage(subscription.id)
-
-        # Check limits based on resource type
-        if self.access_resource == SubscriptionResourceType.JOURNEY:
-            if (
-                usage.learning_journeys_used
-                >= settings.FREE_PLAN_LEARNING_JOURNEYS_LIMIT
-            ):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Monthly limit for learning journeys reached on Free plan. Upgrade to Premium for unlimited access!",
-                )
-        elif self.access_resource == SubscriptionResourceType.LESSON:
-            if usage.lessons_used >= settings.FREE_PLAN_LESSONS_LIMIT:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Monthly limit for lessons reached on Free plan. Upgrade to Premium for unlimited access!",
-                )
-        elif self.access_resource == SubscriptionResourceType.AUDIO:
-            if usage.audio_lessons_used >= settings.FREE_PLAN_AUDIO_LESSONS_LIMIT:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Monthly limit for audio lessons reached on Free plan. Upgrade to Premium for unlimited access!",
-                )
+        # Monthly usage limits are removed entirely; metering is handled by credits
+        return

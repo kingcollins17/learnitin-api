@@ -63,9 +63,6 @@ router = APIRouter()
 async def generate_courses(
     request: CourseGenerationRequest,
     current_user: User = Depends(get_current_active_user),
-    _access: None = Depends(ResourceAccessControl(SubscriptionResourceType.JOURNEY)),
-    subscription: Subscription = Depends(get_user_subscription),
-    usage_service: SubscriptionUsageService = Depends(get_subscription_usage_service),
     service: CourseGenerationService = Depends(get_course_generation_service),
     _credits: User = Depends(HasSufficientCredits(credit_requirement=settings.COURSE_GENERATION_COST)),
     credit_service: CreditService = Depends(get_credit_service),
@@ -83,7 +80,7 @@ async def generate_courses(
     """
     try:
         # Generate courses via service
-        outlines = await service.generate_courses(request, usage_service, subscription)
+        outlines = await service.generate_courses(request)
 
         # Set the level for each generated course
         for outline in outlines:
@@ -334,9 +331,6 @@ async def enroll_course(
     course_id: int,
     service: CourseService = Depends(get_course_service),
     current_user: User = Depends(get_current_active_user),
-    _access: None = Depends(ResourceAccessControl(SubscriptionResourceType.JOURNEY)),
-    subscription: Subscription = Depends(get_user_subscription),
-    usage_service: SubscriptionUsageService = Depends(get_subscription_usage_service),
 ):
     """
     Enroll the current user in a course.
@@ -346,7 +340,7 @@ async def enroll_course(
     try:
         assert current_user.id  # Ensure user has an ID
         user_course = await service.enroll_course(
-            current_user.id, course_id, usage_service, subscription
+            current_user.id, course_id
         )
 
         return success_response(

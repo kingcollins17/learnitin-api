@@ -184,8 +184,6 @@ class CourseService(Commitable):
         self,
         user_id: int,
         course_id: int,
-        usage_service: Optional[SubscriptionUsageService] = None,
-        subscription: Optional[Subscription] = None,
     ) -> UserCourseResponse:
         """
         Enroll a user in a course.
@@ -232,11 +230,7 @@ class CourseService(Commitable):
             course.total_enrollees += 1
             await self.repository.update(course)
 
-        # Increment usage if service and subscription are provided
-        if usage_service and subscription:
-            await usage_service.increment_usage(
-                subscription, SubscriptionResourceType.JOURNEY
-            )
+
 
         # Emit course enrolled event
         assert user_course.id
