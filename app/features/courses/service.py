@@ -54,6 +54,7 @@ class CourseService(Commitable):
         lesson_repository: LessonRepository,
         user_course_repository: UserCourseRepository,
         review_repository: ReviewRepository,
+        category_repository: CategoryRepository,
         storage_service: FirebaseStorageService,
         image_gen_service: ImageGenerationService,
     ):
@@ -62,6 +63,7 @@ class CourseService(Commitable):
         self.lesson_repository = lesson_repository
         self.user_course_repository = user_course_repository
         self.review_repository = review_repository
+        self.category_repository = category_repository
         self.storage_service = storage_service
         self.image_gen_service = image_gen_service
 
@@ -72,11 +74,24 @@ class CourseService(Commitable):
         await self.lesson_repository.session.commit()
         await self.user_course_repository.session.commit()
         await self.review_repository.session.commit()
+        await self.category_repository.session.commit()
+
+    async def _adjust_category_popularity(self, category_id: Optional[int], adjustment: float) -> None:
+        """Adjust the popularity score of a category."""
+        if not category_id:
+            return
+        category = await self.category_repository.get_by_id(category_id)
+        if category:
+            category.popularity_score = max(0.0, category.popularity_score + adjustment)
+            await self.category_repository.update(category)
 
     async def create_course(
         self,
         user_id: int,
         course_data: CourseOutline,
+        category_id: Optional[int] = None,
+        sub_category_id: Optional[int] = None,
+        is_public: bool = False,
     ) -> CourseResponse:
         """
         Create a new course from a course outline.
@@ -84,6 +99,9 @@ class CourseService(Commitable):
         Args:
             user_id: ID of the user creating the course
             course_data: Course outline containing modules and lessons
+            category_id: Optional category ID to assign
+            sub_category_id: Optional sub-category ID to assign
+            is_public: Whether the course should be public (default: False)
 
         Returns:
             Created Course object
@@ -94,9 +112,11 @@ class CourseService(Commitable):
             title=course_data.title,
             description=course_data.description,
             duration=course_data.duration,
-            is_public=False,  # Default to private
+            is_public=is_public,
             learning_pace=LearningPace.BALANCED,  # Default values
             level=course_data.level,
+            category_id=category_id,
+            sub_category_id=sub_category_id,
         )
 
         course = await self.repository.create(course)
@@ -135,6 +155,9 @@ class CourseService(Commitable):
                     quiz_credit_cost=lesson_data.quiz_credit_cost,
                 )
                 await self.lesson_repository.create(lesson)
+
+        if course.is_public and course.category_id:
+            await self._adjust_category_popularity(course.category_id, 1.0)
 
         return CourseResponse.model_validate(course)
 
@@ -229,6 +252,8 @@ class CourseService(Commitable):
         if course:
             course.total_enrollees += 1
             await self.repository.update(course)
+            if course.is_public and course.category_id:
+                await self._adjust_category_popularity(course.category_id, 0.1)
 
 
 
@@ -263,6 +288,7 @@ class CourseService(Commitable):
         sub_category_id: Optional[int] = None,
         min_enrollees: Optional[int] = None,
         search: Optional[str] = None,
+        sort_by_popularity: bool = False,
     ) -> List[CourseResponse]:
         """
         Get all courses with pagination and filters.
@@ -275,6 +301,7 @@ class CourseService(Commitable):
             category_id: Filter by category ID
             sub_category_id: Filter by sub-category ID
             min_enrollees: Filter by minimum number of enrollees
+            sort_by_popularity: Sort by popularity score (default: False)
 
         Returns:
             List of courses matching the filters
@@ -289,6 +316,7 @@ class CourseService(Commitable):
             sub_category_id=sub_category_id,
             min_enrollees=min_enrollees,
             search=search,
+            sort_by_popularity=sort_by_popularity,
         )
         course_responses = [CourseResponse.model_validate(course) for course in courses]
         return await self._attach_review_summaries(course_responses)
@@ -389,7 +417,7 @@ class CourseService(Commitable):
         return courses
 
     async def update_course(
-        self, user_id: int, course_id: int, course_update: dict
+        self, user_id: int, course_id: int, course_update: dict, is_admin: bool = False
     ) -> CourseResponse:
         """
         Update a course.
@@ -398,6 +426,7 @@ class CourseService(Commitable):
             user_id: ID of the user attempting to update
             course_id: ID of the course to update
             course_update: Dictionary of fields to update
+            is_admin: Whether the user is an admin
 
         Returns:
             Updated Course object
@@ -413,15 +442,22 @@ class CourseService(Commitable):
                 detail="Course not found",
             )
 
-        # Only the course creator can update it
-        if course.user_id != user_id:
+        # Only the course creator or an admin can update it
+        if not is_admin and course.user_id != user_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to update this course",
             )
 
+        # Non-admins cannot update popularity_score
+        if not is_admin:
+            course_update.pop("popularity_score", None)
+
         # Update only provided fields
         from datetime import datetime, timezone
+
+        old_is_public = course.is_public
+        old_category_id = course.category_id
 
         for field, value in course_update.items():
             if value is not None and hasattr(course, field):
@@ -429,6 +465,18 @@ class CourseService(Commitable):
 
         # Update timestamp
         course.updated_at = datetime.now(timezone.utc)
+
+        new_is_public = course.is_public
+        new_category_id = course.category_id
+
+        # Adjust popularity score if is_public or category_id changes
+        if old_is_public and new_is_public and old_category_id != new_category_id:
+            await self._adjust_category_popularity(old_category_id, -1.0)
+            await self._adjust_category_popularity(new_category_id, 1.0)
+        elif not old_is_public and new_is_public:
+            await self._adjust_category_popularity(new_category_id, 1.0)
+        elif old_is_public and not new_is_public:
+            await self._adjust_category_popularity(old_category_id, -1.0)
 
         updated_course = await self.repository.update(course)
         return CourseResponse.model_validate(updated_course)
@@ -471,6 +519,8 @@ class CourseService(Commitable):
 
         # Update is_public to False
         course.is_public = False
+        if course.category_id:
+            await self._adjust_category_popularity(course.category_id, -1.0 - (course.total_enrollees * 0.1))
 
         # Update timestamp
         from datetime import datetime, timezone
@@ -553,11 +603,13 @@ class CategoryService(Commitable):
         return await self.category_repository.create(category)
 
     async def get_categories(
-        self, page: int = 1, per_page: int = 100, search: Optional[str] = None
+        self, page: int = 1, per_page: int = 100, search: Optional[str] = None, sort_by_popularity: bool = True
     ) -> List[Category]:
         """Get all categories."""
         skip = (page - 1) * per_page
-        return await self.category_repository.get_all(skip=skip, limit=per_page, search=search)
+        return await self.category_repository.get_all(
+            skip=skip, limit=per_page, search=search, sort_by_popularity=sort_by_popularity
+        )
 
     async def update_category(
         self, category_id: int, category_update: dict

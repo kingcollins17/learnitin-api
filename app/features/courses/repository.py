@@ -211,11 +211,12 @@ class CourseRepository:
         sub_category_id: Optional[int] = None,
         min_enrollees: Optional[int] = None,
         search: Optional[str] = None,
+        sort_by_popularity: bool = False,
         *,
         use_cache: bool = True,
     ) -> List[Course]:
         """Get all courses with pagination and optional filters."""
-        cache_key = (skip, limit, is_public, level, category_id, sub_category_id, min_enrollees, search)
+        cache_key = (skip, limit, is_public, level, category_id, sub_category_id, min_enrollees, search, sort_by_popularity)
         if use_cache:
             cached = cache_service.get(COURSE_LIST_FILTERED_CACHE, cache_key)
             if cached is not None:
@@ -245,7 +246,10 @@ class CourseRepository:
             query = query.where(col(Course.title).contains(search))
 
         # Apply ordering
-        query = query.order_by(col(Course.total_enrollees).desc())
+        if sort_by_popularity:
+            query = query.order_by(col(Course.popularity_score).desc(), col(Course.total_enrollees).desc())
+        else:
+            query = query.order_by(col(Course.total_enrollees).desc())
 
         # Apply pagination
         query = query.offset(skip).limit(limit)
@@ -466,10 +470,16 @@ class CategoryRepository:
         self.session = session
 
     async def get_all(
-        self, skip: int = 0, limit: int = 100, search: Optional[str] = None, *, use_cache: bool = True
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        search: Optional[str] = None,
+        sort_by_popularity: bool = True,
+        *,
+        use_cache: bool = True,
     ) -> List["Category"]:
         """Get all categories."""
-        cache_key = (skip, limit, search)
+        cache_key = (skip, limit, search, sort_by_popularity)
         if use_cache:
             cached = cache_service.get(CATEGORY_LIST_ALL_CACHE, cache_key)
             if cached is not None:
@@ -480,6 +490,11 @@ class CategoryRepository:
             query = query.where(
                 col(Category.name).contains(search) | col(Category.description).contains(search)
             )
+
+        if sort_by_popularity:
+            query = query.order_by(col(Category.popularity_score).desc(), col(Category.name).asc())
+        else:
+            query = query.order_by(col(Category.name).asc())
 
         result = await self.session.execute(query.offset(skip).limit(limit))
         categories = list(result.scalars().all())

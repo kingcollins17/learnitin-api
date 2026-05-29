@@ -35,6 +35,13 @@ class ReviewService(Commitable):
         await self.review_repo.session.commit()
         await self.course_repo.session.commit()
 
+    async def _adjust_course_popularity(self, course_id: int, adjustment: float) -> None:
+        """Adjust the popularity score of a course."""
+        course = await self.course_repo.get_by_id(course_id)
+        if course:
+            course.popularity_score = max(0.0, (getattr(course, "popularity_score", 0.0) or 0.0) + adjustment)
+            await self.course_repo.update(course)
+
     async def create_review(
         self, user_id: int, review_in: ReviewCreate
     ) -> ReviewResponse:
@@ -86,6 +93,13 @@ class ReviewService(Commitable):
             comment=review_in.comment,
         )
         created_review = await self.review_repo.create(review)
+        
+        # Adjust course popularity based on review rating
+        if created_review.rating in [4, 5]:
+            await self._adjust_course_popularity(created_review.course_id, 1.0)
+        elif created_review.rating in [1, 2]:
+            await self._adjust_course_popularity(created_review.course_id, -1.0)
+
         get_cached_summary.cache_invalidate(review_in.course_id, self.review_repo)
         return ReviewResponse.model_validate(created_review)
 
@@ -199,6 +213,8 @@ class ReviewService(Commitable):
                 detail="Not authorized to update this review",
             )
 
+        old_rating = review.rating
+
         if review_in.rating is not None:
             review.rating = review_in.rating
         if review_in.comment is not None:
@@ -206,6 +222,16 @@ class ReviewService(Commitable):
 
         review.updated_at = datetime.now(timezone.utc)
         updated_review = await self.review_repo.update(review)
+
+        # Calculate delta popularity score if rating changed
+        new_rating = updated_review.rating
+        if old_rating != new_rating:
+            old_contrib = 1.0 if old_rating in [4, 5] else (-1.0 if old_rating in [1, 2] else 0.0)
+            new_contrib = 1.0 if new_rating in [4, 5] else (-1.0 if new_rating in [1, 2] else 0.0)
+            adjustment = new_contrib - old_contrib
+            if adjustment != 0.0:
+                await self._adjust_course_popularity(updated_review.course_id, adjustment)
+
         get_cached_summary.cache_invalidate(review.course_id, self.review_repo)
         return ReviewResponse.model_validate(updated_review)
 
@@ -232,6 +258,12 @@ class ReviewService(Commitable):
             )
 
         await self.review_repo.delete(review)
+
+        # Revert rating contribution to course popularity
+        rating_contrib = 1.0 if review.rating in [4, 5] else (-1.0 if review.rating in [1, 2] else 0.0)
+        if rating_contrib != 0.0:
+            await self._adjust_course_popularity(review.course_id, -rating_contrib)
+
         get_cached_summary.cache_invalidate(review.course_id, self.review_repo)
 
     async def _get_review_db(self, review_id: int) -> Review:

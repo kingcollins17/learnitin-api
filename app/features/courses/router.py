@@ -1,5 +1,6 @@
 """Course API endpoints."""
 
+from app.common.events import LogEvent, LogLevel, event_bus
 from typing import Literal
 from fastapi import APIRouter, Depends, status, HTTPException, Query, BackgroundTasks, File, UploadFile
 from typing import List, Optional
@@ -117,6 +118,10 @@ async def generate_courses(
 @router.post("/create", response_model=ApiResponse[CourseResponse])
 async def create_course(
     course_data: CourseOutline,
+    category_id: Optional[int] = Query(None, description="Category ID to assign to the course"),
+    sub_category_id: Optional[int] = Query(None, description="Sub-category ID to assign to the course"),
+    enroll: bool = Query(True, description="Whether to enroll the creator in the course"),
+    is_public: bool = Query(False, description="Whether the course should be public"),
     service: CourseService = Depends(get_course_service),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -128,11 +133,18 @@ async def create_course(
     """
     try:
         assert current_user.id  # Ensure user has an ID
-        course = await service.create_course(current_user.id, course_data)
+        course = await service.create_course(
+            user_id=current_user.id,
+            course_data=course_data,
+            category_id=category_id,
+            sub_category_id=sub_category_id,
+            is_public=is_public,
+        )
 
         # Enroll the creator in the course (optional: could pass usage here too if tracking)
-        assert course.id
-        await service.enroll_course(current_user.id, course.id)
+        if enroll:
+            assert course.id
+            await service.enroll_course(current_user.id, course.id)
 
         return success_response(data=course, details="Course created successfully")
     except Exception as e:
@@ -185,6 +197,7 @@ async def update_course(
             user_id=current_user.id,
             course_id=course_id,
             course_update=update_data,
+            is_admin=current_user.is_superuser,
         )
 
         return success_response(
@@ -482,6 +495,7 @@ async def get_categories(
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     per_page: int = Query(100, ge=1, le=100, description="Items per page"),
     search: Optional[str] = Query(None, description="Search categories by name or description"),
+    sort_by_popularity: bool = Query(False, description="Whether to sort categories by popularity score"),
     service: CategoryService = Depends(get_category_service),
 ):
     """
@@ -490,7 +504,9 @@ async def get_categories(
     **No authentication required.**
     """
     try:
-        categories = await service.get_categories(page=page, per_page=per_page, search=search)
+        categories = await service.get_categories(
+            page=page, per_page=per_page, search=search, sort_by_popularity=sort_by_popularity
+        )
 
         return success_response(
             data=categories,
@@ -764,6 +780,14 @@ async def upload_category_or_subcategory_image(
         raise
     except Exception as e:
         traceback.print_exc()
+        await event_bus.dispatch(
+            LogEvent(
+                level=LogLevel.ERROR,
+                message=f"Failed to upload image: {str(e)}",
+                data={"error": str(e), "traceback": traceback.format_exc()},
+            )
+        )
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to upload image: {str(e)}",
@@ -780,13 +804,14 @@ async def get_courses(
     category_id: int | None = Query(None, description="Filter by category ID"),
     min_enrollees: int | None = Query(None, ge=0, description="Minimum enrollees"),
     search: str | None = Query(None, description="Search for a course by title"),
+    sort_by_popularity: bool = Query(False, description="Whether to sort courses by popularity score"),
     service: CourseService = Depends(get_course_service),
     _maintenance: None = Depends(run_db_maintenance_in_bg),
 ):
     """
     Get all courses with pagination and optional filters.
 
-    Courses are ordered by total enrollees (highest first).
+    Courses are ordered by total enrollees (highest first) by default.
 
     **Query Parameters:**
     - `page`: Page number (default: 1)
@@ -794,6 +819,7 @@ async def get_courses(
     - `is_public`: Filter by public courses (optional)
     - `level`: Filter by course level (beginner, intermediate, expert) (optional)
     - `min_enrollees`: Filter by minimum number of enrollees (optional)
+    - `sort_by_popularity`: Whether to sort by popularity score (optional)
 
     **No authentication required** - returns public courses by default.
     """
@@ -806,6 +832,7 @@ async def get_courses(
             category_id=category_id,
             min_enrollees=min_enrollees,
             search=search,
+            sort_by_popularity=sort_by_popularity,
         )
 
         return success_response(

@@ -37,6 +37,7 @@ class Category(SQLModel, table=True):
     name: str = Field(unique=True, index=True, nullable=False)
     description: Optional[str] = Field(default=None)
     image_url: Optional[str] = Field(default=None)
+    popularity_score: float = Field(default=0.0, nullable=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     courses: List["Course"] = Relationship(back_populates="category")
@@ -86,6 +87,7 @@ class Course(SQLModel, table=True):
     learning_pace: LearningPace = Field(default=LearningPace.BALANCED)
     level: CourseLevel = Field(default=CourseLevel.BEGINNER)
     total_enrollees: int = Field(default=0)
+    popularity_score: float = Field(default=0.0, nullable=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default=None)
 

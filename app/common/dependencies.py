@@ -340,6 +340,7 @@ def get_course_service(
     lesson_repo: LessonRepository = Depends(get_lesson_repository),
     user_course_repo: UserCourseRepository = Depends(get_user_course_repository),
     review_repo: ReviewRepository = Depends(get_review_repository),
+    category_repo: CategoryRepository = Depends(get_category_repository),
     storage_service: FirebaseStorageService = Depends(get_firebase_storage_service),
     image_gen_service: ImageGenerationService = Depends(get_image_generation_service),
 ) -> CourseService:
@@ -349,6 +350,7 @@ def get_course_service(
         lesson_repo,
         user_course_repo,
         review_repo,
+        category_repo,
         storage_service,
         image_gen_service,
     )

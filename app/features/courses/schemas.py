@@ -81,6 +81,7 @@ class CategoryBase(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     image_url: Optional[str] = None
+    popularity_score: Optional[float] = 0.0
 
 
 class CategoryCreate(CategoryBase):
@@ -95,6 +96,7 @@ class CategoryUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     image_url: Optional[str] = None
+    popularity_score: Optional[float] = None
 
 
 class CategoryResponse(CategoryBase):
@@ -152,6 +154,7 @@ class CourseBase(BaseModel):
     is_public: Optional[bool] = False
     category_id: Optional[int] = None
     sub_category_id: Optional[int] = None
+    popularity_score: Optional[float] = 0.0
 
 
 class CourseCreate(CourseBase):
@@ -170,6 +173,7 @@ class CourseUpdate(BaseModel):
     is_public: Optional[bool] = None
     category_id: Optional[int] = None
     sub_category_id: Optional[int] = None
+    popularity_score: Optional[float] = None
 
 
 class CoursePublishRequest(BaseModel):
