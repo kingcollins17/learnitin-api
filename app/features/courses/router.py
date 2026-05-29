@@ -1,6 +1,7 @@
 """Course API endpoints."""
 
-from fastapi import APIRouter, Depends, status, HTTPException, Query, BackgroundTasks
+from typing import Literal
+from fastapi import APIRouter, Depends, status, HTTPException, Query, BackgroundTasks, File, UploadFile
 from typing import List, Optional
 import traceback
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +10,7 @@ from app.common.deps import get_current_active_user, get_current_active_user_opt
 from app.common.config import settings
 from app.common.responses import ApiResponse, success_response
 from app.features.users.models import User
+from app.services.storage_service import FirebaseStorageService
 from app.common.dependencies import (
     get_course_service,
     get_category_service,
@@ -18,6 +20,7 @@ from app.common.dependencies import (
     DBMaintenanceService,
     run_db_maintenance_in_bg,
     get_credit_service,
+    get_firebase_storage_service,
 )
 from app.features.subscriptions.dependencies import (
     ResourceAccessControl,
@@ -680,6 +683,90 @@ async def delete_subcategory(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete sub-category: {str(e)}",
+        )
+
+
+@router.post("/categories-or-subcategories/upload-image", response_model=ApiResponse[dict])
+async def upload_category_or_subcategory_image(
+    type:Literal['category', 'subcategory']= Query(..., description="Specify 'category' or 'subcategory'"),
+    id: int = Query(..., description="The ID of the category or subcategory to update"),
+    file: UploadFile = File(..., description="The image file to upload"),
+    current_user: User = Depends(get_active_admin),
+    category_service: CategoryService = Depends(get_category_service),
+    subcategory_service: SubCategoryService = Depends(get_subcategory_service),
+    storage_service: FirebaseStorageService = Depends(get_firebase_storage_service),
+):
+    """
+    Upload an image for a category or subcategory.
+
+    Uploads the image file to the `/category` subfolder in the Firebase storage bucket.
+
+    If type is 'category', only administrators can upload images.
+    """
+    try:
+        # Check permissions for categories
+        if type == "category" and not current_user.is_superuser:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only administrators can upload category images",
+            )
+
+        # Read the file content
+        file_bytes = await file.read()
+        if not file_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File is empty",
+            )
+
+        # Generate destination path in bucket: sub folder /category
+        import uuid
+        file_ext = file.filename.split(".")[-1] if file.filename and "." in file.filename else "png"
+        # Force a safe filename
+        destination_path = f"category/{type}_{id}_{uuid.uuid4()}.{file_ext}"
+
+        # Upload using storage_service
+        image_url = storage_service.upload_bytes(
+            data=file_bytes,
+            destination_path=destination_path,
+            content_type=file.content_type or "image/png",
+        )
+
+        # Update category or subcategory in DB
+        result_data = {}
+        if type == "category":
+            updated_item = await category_service.update_category(id, {"image_url": image_url})
+            await category_service.commit_all()
+            result_data = {
+                "id": updated_item.id,
+                "name": updated_item.name,
+                "description": updated_item.description,
+                "image_url": updated_item.image_url,
+                "created_at": updated_item.created_at,
+            }
+        else:
+            updated_item = await subcategory_service.update_subcategory(id, {"image_url": image_url})
+            await subcategory_service.commit_all()
+            result_data = {
+                "id": updated_item.id,
+                "category_id": updated_item.category_id,
+                "name": updated_item.name,
+                "description": updated_item.description,
+                "image_url": updated_item.image_url,
+                "created_at": updated_item.created_at,
+            }
+
+        return success_response(
+            data=result_data,
+            details=f"Successfully uploaded and assigned image for {type}",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload image: {str(e)}",
         )
 
 

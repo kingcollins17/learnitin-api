@@ -528,9 +528,10 @@ class CourseService(Commitable):
 class CategoryService(Commitable):
     """Service for category business logic."""
 
-    def __init__(self, category_repository: CategoryRepository):
+    def __init__(self, category_repository: CategoryRepository, storage_service: FirebaseStorageService):
 
         self.category_repository = category_repository
+        self.storage_service = storage_service
 
     async def commit_all(self) -> None:
         """Commit all active sessions in the service's repositories."""
@@ -585,6 +586,9 @@ class CategoryService(Commitable):
                 detail="Category not found",
             )
 
+        if category.image_url:
+            self.storage_service.delete_file(category.image_url)
+
         await self.category_repository.delete(category)
 
 
@@ -595,10 +599,12 @@ class SubCategoryService(Commitable):
         self,
         subcategory_repository: SubCategoryRepository,
         category_repository: CategoryRepository,
+        storage_service: FirebaseStorageService,
     ):
 
         self.subcategory_repository = subcategory_repository
         self.category_repository = category_repository
+        self.storage_service = storage_service
 
     async def commit_all(self) -> None:
         """Commit all active sessions in the service's repositories."""
@@ -681,5 +687,8 @@ class SubCategoryService(Commitable):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Sub-category not found",
             )
+
+        if sub_category.image_url:
+            self.storage_service.delete_file(sub_category.image_url)
 
         await self.subcategory_repository.delete(sub_category)

@@ -314,15 +314,17 @@ def get_review_service(
 
 def get_category_service(
     category_repo: CategoryRepository = Depends(get_category_repository),
+    storage_service: FirebaseStorageService = Depends(get_firebase_storage_service),
 ) -> CategoryService:
-    return CategoryService(category_repo)
+    return CategoryService(category_repo, storage_service)
 
 
 def get_subcategory_service(
     subcategory_repo: SubCategoryRepository = Depends(get_subcategory_repository),
     category_repo: CategoryRepository = Depends(get_category_repository),
+    storage_service: FirebaseStorageService = Depends(get_firebase_storage_service),
 ) -> SubCategoryService:
-    return SubCategoryService(subcategory_repo, category_repo)
+    return SubCategoryService(subcategory_repo, category_repo, storage_service)
 
 
 _image_generation_service = ImageGenerationService(_settings)

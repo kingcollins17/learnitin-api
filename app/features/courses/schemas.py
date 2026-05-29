@@ -80,6 +80,7 @@ class CategoryBase(BaseModel):
 
     name: Optional[str] = None
     description: Optional[str] = None
+    image_url: Optional[str] = None
 
 
 class CategoryCreate(CategoryBase):
@@ -93,6 +94,7 @@ class CategoryUpdate(BaseModel):
 
     name: Optional[str] = None
     description: Optional[str] = None
+    image_url: Optional[str] = None
 
 
 class CategoryResponse(CategoryBase):
@@ -111,6 +113,7 @@ class SubCategoryBase(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     category_id: Optional[int] = None
+    image_url: Optional[str] = None
 
 
 class SubCategoryCreate(SubCategoryBase):
@@ -125,6 +128,7 @@ class SubCategoryUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     category_id: Optional[int] = None
+    image_url: Optional[str] = None
 
 
 class SubCategoryResponse(SubCategoryBase):

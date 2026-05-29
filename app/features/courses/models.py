@@ -36,6 +36,7 @@ class Category(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(unique=True, index=True, nullable=False)
     description: Optional[str] = Field(default=None)
+    image_url: Optional[str] = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     courses: List["Course"] = Relationship(back_populates="category")
@@ -51,6 +52,7 @@ class SubCategory(SQLModel, table=True):
     category_id: int = Field(foreign_key="categories.id", nullable=False, index=True)
     name: str = Field(unique=True, index=True, nullable=False)
     description: Optional[str] = Field(default=None)
+    image_url: Optional[str] = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     category: Category = Relationship(back_populates="sub_categories")
