@@ -55,6 +55,7 @@ class CourseService(Commitable):
         user_course_repository: UserCourseRepository,
         review_repository: ReviewRepository,
         category_repository: CategoryRepository,
+        subcategory_repository: SubCategoryRepository,
         storage_service: FirebaseStorageService,
         image_gen_service: ImageGenerationService,
     ):
@@ -64,6 +65,7 @@ class CourseService(Commitable):
         self.user_course_repository = user_course_repository
         self.review_repository = review_repository
         self.category_repository = category_repository
+        self.subcategory_repository = subcategory_repository
         self.storage_service = storage_service
         self.image_gen_service = image_gen_service
 
@@ -75,6 +77,7 @@ class CourseService(Commitable):
         await self.user_course_repository.session.commit()
         await self.review_repository.session.commit()
         await self.category_repository.session.commit()
+        await self.subcategory_repository.session.commit()
 
     async def _adjust_category_popularity(self, category_id: Optional[int], adjustment: float) -> None:
         """Adjust the popularity score of a category."""
@@ -84,6 +87,15 @@ class CourseService(Commitable):
         if category:
             category.popularity_score = max(0.0, category.popularity_score + adjustment)
             await self.category_repository.update(category)
+
+    async def _adjust_subcategory_popularity(self, subcategory_id: Optional[int], adjustment: float) -> None:
+        """Adjust the popularity score of a subcategory."""
+        if not subcategory_id:
+            return
+        subcategory = await self.subcategory_repository.get_by_id(subcategory_id)
+        if subcategory:
+            subcategory.popularity_score = max(0.0, subcategory.popularity_score + adjustment)
+            await self.subcategory_repository.update(subcategory)
 
     async def create_course(
         self,
@@ -158,6 +170,9 @@ class CourseService(Commitable):
 
         if course.is_public and course.category_id:
             await self._adjust_category_popularity(course.category_id, 1.0)
+
+        if course.sub_category_id:
+            await self._adjust_subcategory_popularity(course.sub_category_id, 1.0)
 
         return CourseResponse.model_validate(course)
 
@@ -458,6 +473,7 @@ class CourseService(Commitable):
 
         old_is_public = course.is_public
         old_category_id = course.category_id
+        old_subcategory_id = course.sub_category_id
 
         for field, value in course_update.items():
             if value is not None and hasattr(course, field):
@@ -468,6 +484,7 @@ class CourseService(Commitable):
 
         new_is_public = course.is_public
         new_category_id = course.category_id
+        new_subcategory_id = course.sub_category_id
 
         # Adjust popularity score if is_public or category_id changes
         if old_is_public and new_is_public and old_category_id != new_category_id:
@@ -477,6 +494,11 @@ class CourseService(Commitable):
             await self._adjust_category_popularity(new_category_id, 1.0)
         elif old_is_public and not new_is_public:
             await self._adjust_category_popularity(old_category_id, -1.0)
+
+        # Adjust subcategory popularity score if sub_category_id changes
+        if old_subcategory_id != new_subcategory_id:
+            await self._adjust_subcategory_popularity(old_subcategory_id, -1.0)
+            await self._adjust_subcategory_popularity(new_subcategory_id, 1.0)
 
         updated_course = await self.repository.update(course)
         return CourseResponse.model_validate(updated_course)
@@ -689,15 +711,22 @@ class SubCategoryService(Commitable):
         return await self.subcategory_repository.create(sub_category)
 
     async def get_subcategories(
-        self, page: int = 1, per_page: int = 100, category_id: Optional[int] = None
+        self,
+        page: int = 1,
+        per_page: int = 100,
+        category_id: Optional[int] = None,
+        search: Optional[str] = None,
+        sort_by_popularity: bool = False,
     ) -> List[SubCategory]:
-        """Get all sub-categories, optionally filtered by category."""
+        """Get all sub-categories, optionally filtered by category, search query, and sorted by popularity."""
         skip = (page - 1) * per_page
-        if category_id:
-            return await self.subcategory_repository.get_by_category_id(
-                category_id=category_id, skip=skip, limit=per_page
-            )
-        return await self.subcategory_repository.get_all(skip=skip, limit=per_page)
+        return await self.subcategory_repository.get_all(
+            skip=skip,
+            limit=per_page,
+            category_id=category_id,
+            search=search,
+            sort_by_popularity=sort_by_popularity,
+        )
 
     async def update_subcategory(
         self, sub_category_id: int, sub_category_update: dict

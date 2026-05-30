@@ -578,11 +578,29 @@ class SubCategoryRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_all(self, skip: int = 0, limit: int = 100) -> List["SubCategory"]:
-        """Get all sub-categories."""
-        result = await self.session.execute(
-            select(SubCategory).offset(skip).limit(limit)
-        )
+    async def get_all(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        category_id: Optional[int] = None,
+        search: Optional[str] = None,
+        sort_by_popularity: bool = False,
+    ) -> List["SubCategory"]:
+        """Get all sub-categories with optional category filter, search, and sorting."""
+        query = select(SubCategory)
+        if category_id is not None:
+            query = query.where(SubCategory.category_id == category_id)
+        if search:
+            query = query.where(
+                col(SubCategory.name).contains(search) | col(SubCategory.description).contains(search)
+            )
+
+        if sort_by_popularity:
+            query = query.order_by(col(SubCategory.popularity_score).desc(), col(SubCategory.name).asc())
+        else:
+            query = query.order_by(col(SubCategory.name).asc())
+
+        result = await self.session.execute(query.offset(skip).limit(limit))
         return list(result.scalars().all())
 
     async def get_by_id(self, sub_category_id: int) -> Optional["SubCategory"]:

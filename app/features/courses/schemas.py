@@ -116,6 +116,7 @@ class SubCategoryBase(BaseModel):
     description: Optional[str] = None
     category_id: Optional[int] = None
     image_url: Optional[str] = None
+    popularity_score: Optional[float] = 0.0
 
 
 class SubCategoryCreate(SubCategoryBase):
@@ -131,6 +132,7 @@ class SubCategoryUpdate(BaseModel):
     description: Optional[str] = None
     category_id: Optional[int] = None
     image_url: Optional[str] = None
+    popularity_score: Optional[float] = None
 
 
 class SubCategoryResponse(SubCategoryBase):

@@ -587,12 +587,12 @@ async def delete_category(
 async def create_subcategory(
     sub_category_data: SubCategoryCreate,
     service: SubCategoryService = Depends(get_subcategory_service),
-    current_user: User = Depends(get_current_active_user),
+    admin: User = Depends(get_active_admin),
 ):
     """
     Create a new sub-category.
 
-    **Authentication required.**
+    **Admin only.**
     """
     try:
         sub_category = await service.create_subcategory(sub_category_data.model_dump())
@@ -616,6 +616,8 @@ async def get_subcategories(
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     per_page: int = Query(100, ge=1, le=100, description="Items per page"),
     category_id: int | None = Query(None, description="Filter by category ID"),
+    search: Optional[str] = Query(None, description="Search sub-categories by name or description"),
+    sort_by_popularity: bool = Query(False, description="Whether to sort sub-categories by popularity score"),
     service: SubCategoryService = Depends(get_subcategory_service),
 ):
     """
@@ -625,7 +627,11 @@ async def get_subcategories(
     """
     try:
         sub_categories = await service.get_subcategories(
-            page=page, per_page=per_page, category_id=category_id
+            page=page,
+            per_page=per_page,
+            category_id=category_id,
+            search=search,
+            sort_by_popularity=sort_by_popularity,
         )
 
         return success_response(
@@ -647,12 +653,12 @@ async def update_subcategory(
     sub_category_id: int,
     sub_category_update: SubCategoryUpdate,
     service: SubCategoryService = Depends(get_subcategory_service),
-    current_user: User = Depends(get_current_active_user),
+    admin: User = Depends(get_active_admin),
 ):
     """
     Update a sub-category.
 
-    **Authentication required.**
+    **Admin only.**
     """
     try:
         updated_sub_category = await service.update_subcategory(

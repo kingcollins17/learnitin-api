@@ -54,6 +54,7 @@ class SubCategory(SQLModel, table=True):
     name: str = Field(unique=True, index=True, nullable=False)
     description: Optional[str] = Field(default=None)
     image_url: Optional[str] = Field(default=None)
+    popularity_score: float = Field(default=0.0, nullable=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     category: Category = Relationship(back_populates="sub_categories")
