@@ -624,6 +624,16 @@ class CategoryService(Commitable):
         category = Category(**category_data)
         return await self.category_repository.create(category)
 
+    async def get_category_by_id(self, category_id: int) -> Category:
+        """Get a category by ID."""
+        category = await self.category_repository.get_by_id(category_id)
+        if not category:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Category not found",
+            )
+        return category
+
     async def get_categories(
         self, page: int = 1, per_page: int = 100, search: Optional[str] = None, sort_by_popularity: bool = True
     ) -> List[Category]:
@@ -709,6 +719,16 @@ class SubCategoryService(Commitable):
 
         sub_category = SubCategory(**sub_category_data)
         return await self.subcategory_repository.create(sub_category)
+
+    async def get_subcategory_by_id(self, sub_category_id: int) -> SubCategory:
+        """Get a sub-category by ID."""
+        sub_category = await self.subcategory_repository.get_by_id(sub_category_id)
+        if not sub_category:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Sub-category not found",
+            )
+        return sub_category
 
     async def get_subcategories(
         self,

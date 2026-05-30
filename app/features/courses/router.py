@@ -520,6 +520,32 @@ async def get_categories(
         )
 
 
+@router.get("/categories/{category_id}", response_model=ApiResponse[CategoryResponse])
+async def get_category_by_id(
+    category_id: int,
+    service: CategoryService = Depends(get_category_service),
+):
+    """
+    Get a category by ID.
+
+    **No authentication required.**
+    """
+    try:
+        category = await service.get_category_by_id(category_id)
+        return success_response(
+            data=category,
+            details="Category retrieved successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch category: {str(e)}",
+        )
+
+
 @router.patch("/categories/{category_id}", response_model=ApiResponse[CategoryResponse])
 async def update_category(
     category_id: int,
@@ -643,6 +669,32 @@ async def get_subcategories(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch sub-categories: {str(e)}",
+        )
+
+
+@router.get("/sub-categories/{sub_category_id}", response_model=ApiResponse[SubCategoryResponse])
+async def get_subcategory_by_id(
+    sub_category_id: int,
+    service: SubCategoryService = Depends(get_subcategory_service),
+):
+    """
+    Get a sub-category by ID.
+
+    **No authentication required.**
+    """
+    try:
+        sub_category = await service.get_subcategory_by_id(sub_category_id)
+        return success_response(
+            data=sub_category,
+            details="Sub-category retrieved successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch sub-category: {str(e)}",
         )
 
 
