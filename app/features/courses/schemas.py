@@ -176,6 +176,7 @@ class CourseUpdate(BaseModel):
     category_id: Optional[int] = None
     sub_category_id: Optional[int] = None
     popularity_score: Optional[float] = None
+    total_enrollees: Optional[int] = None
 
 
 class CoursePublishRequest(BaseModel):

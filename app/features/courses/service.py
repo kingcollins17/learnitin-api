@@ -464,9 +464,10 @@ class CourseService(Commitable):
                 detail="You don't have permission to update this course",
             )
 
-        # Non-admins cannot update popularity_score
+        # Non-admins cannot update popularity_score or total_enrollees
         if not is_admin:
             course_update.pop("popularity_score", None)
+            course_update.pop("total_enrollees", None)
 
         # Update only provided fields
         from datetime import datetime, timezone
