@@ -252,6 +252,8 @@ class UserCourseResponse(BaseModel):
     total_modules: Optional[int] = None
     current_module_id: Optional[int] = None
     current_lesson_id: Optional[int] = None
+    completed_lessons: Optional[int] = None
+    total_lessons: Optional[int] = None
     course: Optional[CourseResponse] = None
 
     class Config:
