@@ -64,6 +64,8 @@ class Settings(BaseSettings):
 
     # Credits
     NEW_USER_WELCOME_CREDITS: int = Field(default=100)
+    PREMIUM_SUBSCRIPTION_CREDITS: int = Field(default=800)
+    STREAK_7_DAY_BONUS: int = Field(default=60)
 
     COURSE_GENERATION_COST: int = Field(default=10)
 

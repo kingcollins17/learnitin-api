@@ -5,8 +5,12 @@ from typing import Dict, List, Optional
 from zoneinfo import ZoneInfo
 
 from app.common.service import Commitable
+from app.common.config import settings
+from app.common.events import event_bus, NotificationInAppPushEvent, InAppEventType
 from app.features.courses.repository import CourseRepository, UserCourseRepository
 from app.features.courses.models import ProgressStatus
+from app.features.credits.service import CreditService
+from app.features.credits.models import CreditTransactionType
 from .models import CourseDailyStreak, CourseProgressEvent
 from .repository import StreakRepository
 from .schemas import CourseStreakResponse, DashboardStatsResponse, WeekActivityDay, WeekActivityStatus
@@ -20,10 +24,12 @@ class StreakService(Commitable):
         streak_repository: StreakRepository,
         user_course_repository: UserCourseRepository,
         course_repository: CourseRepository,
+        credit_service: CreditService,
     ):
         self.streak_repo = streak_repository
         self.user_course_repo = user_course_repository
         self.course_repo = course_repository
+        self.credit_service = credit_service
 
     async def commit_all(self) -> None:
         """Commit all active database sessions."""
@@ -67,6 +73,37 @@ class StreakService(Commitable):
         await self.streak_repo.upsert_daily_streak(
             user_id=user_id, course_id=course_id, streak_date=local_today
         )
+
+        # 3. Check for 7-day streak bonus
+        stats = await self.calculate_streak_stats(user_id, course_id, "Course", timezone_str)
+        if stats.current_streak > 0 and stats.current_streak % 7 == 0:
+            idemp_key = f"streak_bonus_{user_id}_{course_id}_{local_today.isoformat()}"
+            try:
+                existing = await self.credit_service.repository.get(idempotency_key=idemp_key)
+                if not existing:
+                    await self.credit_service.add_credits(
+                        user_id=user_id,
+                        amount=settings.STREAK_7_DAY_BONUS,
+                        transaction_type=CreditTransactionType.BONUS,
+                        description=f"Completed {stats.current_streak}-day streak!",
+                        idempotency_key=idemp_key
+                    )
+                    await self.credit_service.commit_all()
+
+                    # Dispatch notification
+                    await event_bus.dispatch(
+                        NotificationInAppPushEvent(
+                            user_id=user_id,
+                            title="Streak Bonus!",
+                            message=f"You earned {settings.STREAK_7_DAY_BONUS} credits for a {stats.current_streak}-day streak!",
+                            type="streak_bonus",
+                            in_app_event=InAppEventType.INFO,
+                            data={"streak": stats.current_streak, "credits": settings.STREAK_7_DAY_BONUS}
+                        )
+                    )
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Failed to grant streak bonus: {e}")
 
         return event
 

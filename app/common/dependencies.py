@@ -538,6 +538,7 @@ def get_streak_service(
     repo: StreakRepository = Depends(get_streak_repository),
     user_course_repo: UserCourseRepository = Depends(get_user_course_repository),
     course_repo: CourseRepository = Depends(get_course_repository),
+    credit_service: CreditService = Depends(get_credit_service),
 ) -> StreakService:
-    return StreakService(repo, user_course_repo, course_repo)
+    return StreakService(repo, user_course_repo, course_repo, credit_service)
 

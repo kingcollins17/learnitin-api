@@ -133,7 +133,7 @@ app.include_router(
 app.include_router(
     subscriptions_router,
     prefix=f"{settings.API_V1_PREFIX}/billing",
-    tags=["Subscriptions"],
+    tags=["Subscriptions & Billing (Credit Packs purchase)"],
 )
 app.include_router(
     logs_router,
