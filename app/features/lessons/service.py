@@ -24,6 +24,7 @@ from app.features.subscriptions.usage_service import SubscriptionUsageService
 from app.services.audio_conversion_service import AudioConversionService
 from app.features.lessons.schemas import CompleteLessonResult
 from app.features.lessons.schemas import UserLessonResponse
+from app.features.credits.service import CreditService
 from app.common.service import Commitable
 from app.common.events import LogEvent, LogLevel, event_bus
 
@@ -410,12 +411,14 @@ class UserLessonService(Commitable):
         user_course_repository: UserCourseRepository,
         user_module_repository: UserModuleRepository,
         user_module_service: UserModuleService,
+        credit_service: CreditService,
     ):
         self.user_lesson_repo = user_lesson_repository
         self.lesson_repo = lesson_repository
         self.user_course_repo = user_course_repository
         self.user_module_repo = user_module_repository
         self.user_module_service = user_module_service
+        self.credit_service = credit_service
 
     async def start_lesson(
         self,
@@ -668,6 +671,54 @@ class UserLessonService(Commitable):
 
         return user_lesson
 
+    async def unlock_quiz(
+        self,
+        user_id: int,
+        lesson_id: int,
+    ) -> UserLesson:
+        """
+        Unlock quiz for a lesson.
+
+        Args:
+            user_id: ID of the user
+            lesson_id: ID of the lesson
+
+        Returns:
+            Updated UserLesson object
+        """
+        user_lesson = await self.get_user_lesson(user_id=user_id, lesson_id=lesson_id)
+        if not user_lesson:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User lesson not found",
+            )
+
+        if not user_lesson.is_quiz_unlocked:
+            # Get the lesson details to find quiz_credit_cost and title
+            lesson = await self.lesson_repo.get_by_id(lesson_id)
+            if not lesson:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Lesson not found",
+                )
+
+            # Spend credits
+            from app.features.credits.models import CreditTransactionType
+            await self.credit_service.spend_credits(
+                user_id=user_id,
+                amount=lesson.quiz_credit_cost,
+                transaction_type=CreditTransactionType.QUIZ_GENERATION,
+                description=f"Unlocked quiz for lesson: {lesson.title}",
+                reference_id=str(lesson_id),
+                reference_type="lesson",
+            )
+
+            user_lesson.is_quiz_unlocked = True
+            user_lesson.updated_at = datetime.now(timezone.utc)
+            await self.user_lesson_repo.update(user_lesson)
+
+        return user_lesson
+
     async def complete_quiz(self, user_id: int, lesson_id: int) -> UserLesson:
         """
         Mark quiz as completed for a lesson.
@@ -753,3 +804,4 @@ class UserLessonService(Commitable):
         await self.lesson_repo.session.commit()
         await self.user_course_repo.session.commit()
         await self.user_module_repo.session.commit()
+        await self.credit_service.commit_all()

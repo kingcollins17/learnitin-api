@@ -121,6 +121,7 @@ class UserLessonBase(BaseModel):
 
     is_lesson_unlocked: bool = False
     is_audio_unlocked: bool = False
+    is_quiz_unlocked: bool = False
     is_quiz_completed: bool = False
     status: ProgressStatus = ProgressStatus.IN_PROGRESS
 
@@ -133,6 +134,7 @@ class UserLessonCreate(BaseModel):
     course_id: int
     is_lesson_unlocked: bool = False
     is_audio_unlocked: bool = False
+    is_quiz_unlocked: bool = False
     is_quiz_completed: bool = False
     status: ProgressStatus = ProgressStatus.IN_PROGRESS
 
@@ -142,6 +144,7 @@ class UserLessonUpdate(BaseModel):
 
     is_lesson_unlocked: Optional[bool] = None
     is_audio_unlocked: Optional[bool] = None
+    is_quiz_unlocked: Optional[bool] = None
     is_quiz_completed: Optional[bool] = None
     status: Optional[ProgressStatus] = None
 
@@ -156,6 +159,7 @@ class UserLessonResponse(BaseModel):
     lesson_id: int
     is_lesson_unlocked: bool
     is_audio_unlocked: bool
+    is_quiz_unlocked: bool
     is_quiz_completed: bool
     status: ProgressStatus
     created_at: datetime

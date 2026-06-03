@@ -416,6 +416,7 @@ def get_user_lesson_service(
     user_course_repo: UserCourseRepository = Depends(get_user_course_repository),
     user_module_repo: UserModuleRepository = Depends(get_user_module_repository),
     user_module_service: UserModuleService = Depends(get_user_module_service),
+    credit_service: CreditService = Depends(get_credit_service),
 ) -> UserLessonService:
     return UserLessonService(
         user_lesson_repository=user_lesson_repo,
@@ -423,6 +424,7 @@ def get_user_lesson_service(
         user_course_repository=user_course_repo,
         user_module_repository=user_module_repo,
         user_module_service=user_module_service,
+        credit_service=credit_service,
     )
 
 

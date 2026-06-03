@@ -28,10 +28,10 @@ async def get_quiz(
     generate_if_missing: bool = Query(
         True, description="Generate quiz if it doesn't exist"
     ),
-    session: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user),
     service: QuizService = Depends(get_quiz_service),
     lesson_service: LessonService = Depends(get_lesson_service),
+    user_lesson_service: UserLessonService = Depends(get_user_lesson_service),
 ):
     """
     Get quiz for a specific lesson.
@@ -57,6 +57,13 @@ async def get_quiz(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Lesson content is empty. Cannot generate quiz.",
                 )
+
+            # Ensure the quiz is unlocked (and credits deducted) via the service
+            await user_lesson_service.unlock_quiz(
+                user_id=current_user.id,
+                lesson_id=lesson_id,
+            )
+            await user_lesson_service.commit_all()
 
             # 3. Generate quiz
             quiz = await service.generate_and_save_quiz(lesson)
@@ -89,6 +96,7 @@ async def generate_quiz(
     current_user: User = Depends(get_current_active_user),
     service: QuizService = Depends(get_quiz_service),
     lesson_service: LessonService = Depends(get_lesson_service),
+    user_lesson_service: UserLessonService = Depends(get_user_lesson_service),
     _credits: User = Depends(HasSufficientLessonCredits("quiz")),
 ):
     """
@@ -121,6 +129,13 @@ async def generate_quiz(
                 data=existing,
                 details="Quiz already exists. Use GET to retrieve it.",
             )
+
+        # Ensure the quiz is unlocked (and credits deducted) via the service
+        await user_lesson_service.unlock_quiz(
+            user_id=current_user.id,
+            lesson_id=lesson_id,
+        )
+        await user_lesson_service.commit_all()
 
         # 3. Generate quiz
         quiz = await service.generate_and_save_quiz(

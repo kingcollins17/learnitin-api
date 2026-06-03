@@ -538,8 +538,6 @@ async def unlock_audio(
         user_lesson = await user_lesson_service.unlock_audio(
             user_id=current_user.id,
             lesson_id=lesson_id,
-            usage_service=None,
-            subscription=None,
         )
         await user_lesson_service.commit_all()
 
@@ -585,6 +583,42 @@ async def unlock_audio(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to unlock audio: {str(e)}",
+        )
+
+
+@router.post(
+    "/user/lessons/unlock-quiz", response_model=ApiResponse[UserLessonResponse]
+)
+async def unlock_quiz(
+    lesson_id: int = Query(..., description="ID of the lesson"),
+    user_lesson_service: UserLessonService = Depends(get_user_lesson_service),
+    current_user: User = Depends(get_current_active_user),
+    _credits: User = Depends(HasSufficientLessonCredits("quiz")),
+):
+    """
+    Unlock quiz for a lesson.
+    """
+    try:
+        assert current_user.id
+
+        # Unlock quiz and deduct credits inside the service
+        user_lesson = await user_lesson_service.unlock_quiz(
+            user_id=current_user.id,
+            lesson_id=lesson_id,
+        )
+        await user_lesson_service.commit_all()
+
+        return success_response(
+            data=user_lesson,
+            details="Quiz unlocked successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to unlock quiz: {str(e)}",
         )
 
 
