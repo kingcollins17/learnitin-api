@@ -58,6 +58,7 @@ async def get_quiz(
                     detail="Lesson content is empty. Cannot generate quiz.",
                 )
 
+            assert current_user.id, 'User ID cannot be None'
             # Ensure the quiz is unlocked (and credits deducted) via the service
             await user_lesson_service.unlock_quiz(
                 user_id=current_user.id,
@@ -131,6 +132,7 @@ async def generate_quiz(
             )
 
         # Ensure the quiz is unlocked (and credits deducted) via the service
+        assert current_user.id, 'User ID cannot be None'
         await user_lesson_service.unlock_quiz(
             user_id=current_user.id,
             lesson_id=lesson_id,
