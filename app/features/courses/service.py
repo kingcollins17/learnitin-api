@@ -19,6 +19,7 @@ from app.features.courses.models import (
     CourseLevel,
     Category,
     SubCategory,
+    ProgressStatus,
 )
 from app.features.modules.models import Module
 from app.features.lessons.models import Lesson
@@ -634,6 +635,56 @@ class CourseService(Commitable):
                 )
 
         await self.repository.delete(course)
+
+    async def update_user_course_lessons_count(
+        self, user_id: int, course_id: int
+    ) -> Optional[UserCourse]:
+        """
+        Calculate and update user_course.total_lessons and user_course.completed_lessons.
+
+        Fetches the user lessons (UserLesson) for that course and checks the ones where
+        status is completed, and the total, then updates the user_course with the calculated values.
+
+        Args:
+            user_id: ID of the user
+            course_id: ID of the course
+
+        Returns:
+            Updated UserCourse object
+
+        Raises:
+            HTTPException: If user course enrollment not found
+        """
+        # Fetch user course record
+        user_course = await self.user_course_repository.get_by_user_and_course(
+            user_id=user_id, course_id=course_id, use_cache=False
+        )
+        if not user_course:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User course enrollment not found",
+            )
+
+        # Fetch user lessons for the course
+        user_lesson_repo = UserLessonRepository(self.user_course_repository.session)
+        user_lessons = await user_lesson_repo.get_by_user_and_course(
+            user_id=user_id, course_id=course_id
+        )
+
+        # Fetch total lessons for the course from lessons table
+        lessons = await self.lesson_repository.get_by_course_id(course_id, limit=9999)
+        total_lessons = len(lessons)
+
+        completed_lessons = sum(
+            1 for ul in user_lessons if ul.status == ProgressStatus.COMPLETED
+        )
+
+        # Update user course record
+        user_course.total_lessons = total_lessons
+        user_course.completed_lessons = completed_lessons
+        user_course.updated_at = datetime.now(timezone.utc)
+
+        return await self.user_course_repository.update(user_course)
 
 
 class CategoryService(Commitable):
