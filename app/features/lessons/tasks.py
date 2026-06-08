@@ -10,6 +10,8 @@ from app.common.events import (
     AudioGenerationFailedEvent,
     NotificationInAppPushEvent,
     InAppEventType,
+    LogEvent,
+    LogLevel,
 )
 
 
@@ -51,7 +53,7 @@ async def generate_audio_background(
             )
             # Still publish completed if user is waiting
             if user_id:
-                event_bus.dispatch(
+                await event_bus.dispatch(
                     AudioReadyEvent(
                         user_id=user_id,
                         lesson_id=lesson_id,
@@ -60,14 +62,14 @@ async def generate_audio_background(
                     )
                 )
                 # Dispatch transient notification
-                event_bus.dispatch(
+                await event_bus.dispatch(
                     NotificationInAppPushEvent(
                         user_id=user_id,
                         title="Audio Ready",
                         message=f"Audio for '{lesson.title}' is ready to listen.",
                         type="success",
                         in_app_event=InAppEventType.AUDIO_READY,
-                        data={"lesson_id": lesson_id},
+                        data={"lesson_id": lesson_id, "audio_ready": "true"},
                         created_at=datetime.now(timezone.utc).isoformat(),
                     )
                 )
@@ -99,7 +101,7 @@ async def generate_audio_background(
         # Publish completion events
         if user_id:
             # 1. Dispatch AudioReadyEvent
-            event_bus.dispatch(
+            await event_bus.dispatch(
                 AudioReadyEvent(
                     user_id=user_id,
                     lesson_id=lesson_id,
@@ -108,7 +110,7 @@ async def generate_audio_background(
                 )
             )
             # 2. Dispatch transient notification (WS only, not in DB)
-            event_bus.dispatch(
+            await event_bus.dispatch(
                 NotificationInAppPushEvent(
                     user_id=user_id,
                     title="Audio Ready",
@@ -127,13 +129,27 @@ async def generate_audio_background(
 
         # Publish failure event
         if user_id:
-            event_bus.dispatch(
+            await event_bus.dispatch(
                 AudioGenerationFailedEvent(
                     user_id=user_id,
                     lesson_id=lesson_id,
                     error=str(e),
                 )
             )
+        
+        # Dispatch error log event
+        await event_bus.dispatch(
+            LogEvent(
+                level=LogLevel.ERROR,
+                message=error_msg,
+                data={
+                    "lesson_id": lesson_id,
+                    "user_id": user_id,
+                    "error": str(e),
+                    "stacktrace": traceback.format_exc(),
+                },
+            )
+        )
     finally:
         # Stop tracking so new generation can be requested if needed
         audio_tracker.stop_tracking(lesson_id)
@@ -212,6 +228,7 @@ async def generate_lesson_content_background(
                 type=NotificationType.INFO,
                 data={
                     "lesson_id": lesson_id,
+                    "lesson_ready": "true",
                     "in_app_event": InAppEventType.LESSON_READY,
                 },
             )
