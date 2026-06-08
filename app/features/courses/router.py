@@ -1,5 +1,6 @@
 """Course API endpoints."""
 
+from app.common.deps import get_current_user
 from app.common.events import LogEvent, LogLevel, event_bus
 from typing import Literal
 from fastapi import APIRouter, Depends, status, HTTPException, Query, BackgroundTasks, File, UploadFile
@@ -261,7 +262,7 @@ async def publish_course(
     publish_data: CoursePublishRequest,
     background_tasks: BackgroundTasks,
     service: CourseService = Depends(get_course_service),
-    current_user: User = Depends(get_premium_user),
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Publish a course to make it public.

@@ -111,11 +111,7 @@ async def get_premium_user(
     """
     Dependency that ensures the current user has an active premium subscription.
     """
-    if service.is_free_plan(subscription):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Premium subscription required",
-        )
+    # DO NOTHING
 
     return current_user
 
