@@ -201,3 +201,95 @@ async def test_unenroll_course(
     # Check if total_enrollees is decremented to 0
     await db_session.refresh(course)
     assert course.total_enrollees == 0
+
+
+@pytest.mark.asyncio
+async def test_get_user_course_detail_triggers_lessons_count_update(
+    client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+):
+    """Test that fetching user course detail triggers update of total/completed lessons if null."""
+    # 1. Get current user
+    username = "testuser"
+    result = await db_session.execute(select(User).where(User.username == username))
+    user = result.scalars().first()
+    assert user is not None
+
+    # 2. Create Course
+    course = Course(
+        title="Detail Test Course",
+        description="Testing detail update API",
+        user_id=user.id,
+        duration="1h",
+        is_public=True,
+    )
+    db_session.add(course)
+    await db_session.flush()
+
+    # 3. Create Module and Lessons
+    module = Module(
+        title="Test Module", course_id=course.id, module_slug="detail-mod", order=1
+    )
+    db_session.add(module)
+    await db_session.flush()
+
+    lesson1 = Lesson(
+        title="Test Lesson 1", course_id=course.id, module_id=module.id, order=1
+    )
+    lesson2 = Lesson(
+        title="Test Lesson 2", course_id=course.id, module_id=module.id, order=2
+    )
+    db_session.add(lesson1)
+    db_session.add(lesson2)
+    await db_session.flush()
+
+    # 4. Enroll: Create UserCourse with total_lessons and completed_lessons as None
+    user_course = UserCourse(
+        user_id=user.id,
+        course_id=course.id,
+        current_module_id=module.id,
+        current_lesson_id=lesson1.id,
+        total_lessons=None,
+        completed_lessons=None,
+    )
+    db_session.add(user_course)
+
+    # Create UserLessons progress
+    from app.features.lessons.models import UserLesson, ProgressStatus
+    user_lesson1 = UserLesson(
+        user_id=user.id,
+        course_id=course.id,
+        module_id=module.id,
+        lesson_id=lesson1.id,
+        status=ProgressStatus.COMPLETED,
+    )
+    user_lesson2 = UserLesson(
+        user_id=user.id,
+        course_id=course.id,
+        module_id=module.id,
+        lesson_id=lesson2.id,
+        status=ProgressStatus.IN_PROGRESS,
+    )
+    db_session.add(user_lesson1)
+    db_session.add(user_lesson2)
+    await db_session.commit()
+
+    # 5. Call user course detail API
+    response = await client.get(
+        f"/api/v1/courses/user/courses/detail?course_id={course.id}",
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["status"] == "success"
+    user_course_detail = data["data"]
+
+    # Verify that total_lessons and completed_lessons have been updated and are not None
+    assert user_course_detail["total_lessons"] == 2
+    assert user_course_detail["completed_lessons"] == 1
+
+    # Verify DB has been updated
+    await db_session.refresh(user_course)
+    assert user_course.total_lessons == 2
+    assert user_course.completed_lessons == 1
+

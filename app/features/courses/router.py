@@ -478,6 +478,19 @@ async def get_user_course_detail(
             user_id=current_user.id,
             course_id=course_id,
         )
+        if not user_course:
+            raise HTTPException(status_code=404, detail='User course not found')
+
+        if user_course.total_lessons in (0, None) or user_course.completed_lessons in (0, None):
+            await service.update_user_course_lessons_count(
+                user_id=current_user.id,
+                course_id=course_id,
+            )
+            await service.commit_all()
+            user_course = await service.get_user_course_detail(
+                user_id=current_user.id,
+                course_id=course_id,
+            )
 
         return success_response(
             data=user_course,
