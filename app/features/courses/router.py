@@ -200,6 +200,7 @@ async def update_course(
             course_update=update_data,
             is_admin=current_user.is_superuser,
         )
+        await service.commit_all()
 
         return success_response(
             data=updated_course,
@@ -286,11 +287,12 @@ async def publish_course(
             course_id=course_id,
             course_update=update_data,
         )
+        await service.commit_all()
 
         # Generate image in background if it's missing
         if not updated_course.image_url:
             background_tasks.add_task(
-                generate_course_image_background, course_id, service
+                generate_course_image_background, course_id
             )
 
         return success_response(
@@ -328,6 +330,7 @@ async def unpublish_course(
             user_id=current_user.id,
             course_id=course_id,
         )
+        await service.commit_all()
 
         return success_response(
             data=updated_course,
@@ -981,7 +984,7 @@ async def get_course_detail(
         # Generate image in background if it's missing
         if not course.image_url:
             background_tasks.add_task(
-                generate_course_image_background, course_id, service
+                generate_course_image_background, course_id, 
             )
 
         return success_response(

@@ -139,7 +139,8 @@ class CourseRepository:
         await self.session.refresh(course)
 
         # Invalidate course caches
-        self.invalidate_cache(course.id)
+        if course.id:
+            self.invalidate_cache(course.id)
 
         return course
 
