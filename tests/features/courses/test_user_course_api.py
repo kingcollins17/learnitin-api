@@ -97,3 +97,107 @@ async def test_user_course_response_includes_current_position(
     assert "current_lesson_id" in user_course_detail
     assert user_course_detail["current_module_id"] == module.id
     assert user_course_detail["current_lesson_id"] == lesson.id
+
+
+@pytest.mark.asyncio
+async def test_unenroll_course(
+    client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+):
+    """Test that unenrolling from a course deletes UserCourse, UserModule, and UserLesson progress."""
+
+    # 1. Get current user
+    username = "testuser"
+    result = await db_session.execute(select(User).where(User.username == username))
+    user = result.scalars().first()
+    assert user is not None
+
+    # 2. Create Course
+    course = Course(
+        title="Unenroll Test Course",
+        description="Testing unenroll API",
+        user_id=user.id,
+        duration="1h",
+        is_public=True,
+    )
+    db_session.add(course)
+    await db_session.flush()
+
+    # 3. Create Module and Lesson
+    module = Module(
+        title="Test Module", course_id=course.id, module_slug="unenroll-mod", order=1
+    )
+    db_session.add(module)
+    await db_session.flush()
+
+    lesson = Lesson(
+        title="Test Lesson", course_id=course.id, module_id=module.id, order=1
+    )
+    db_session.add(lesson)
+    await db_session.flush()
+
+    # 4. Enroll: Create UserCourse, UserModule, UserLesson
+    user_course = UserCourse(
+        user_id=user.id,
+        course_id=course.id,
+        current_module_id=module.id,
+        current_lesson_id=lesson.id,
+    )
+    db_session.add(user_course)
+    
+    from app.features.modules.models import UserModule
+    user_module = UserModule(
+        user_id=user.id,
+        course_id=course.id,
+        module_id=module.id,
+    )
+    db_session.add(user_module)
+
+    from app.features.lessons.models import UserLesson
+    user_lesson = UserLesson(
+        user_id=user.id,
+        course_id=course.id,
+        module_id=module.id,
+        lesson_id=lesson.id,
+    )
+    db_session.add(user_lesson)
+
+    course.total_enrollees = 1
+    db_session.add(course)
+    await db_session.commit()
+
+    # Verify they exist first
+    q_uc = await db_session.execute(select(UserCourse).where(UserCourse.user_id == user.id, UserCourse.course_id == course.id))
+    assert q_uc.scalar_one_or_none() is not None
+    q_um = await db_session.execute(select(UserModule).where(UserModule.user_id == user.id, UserModule.course_id == course.id))
+    assert q_um.scalar_one_or_none() is not None
+    q_ul = await db_session.execute(select(UserLesson).where(UserLesson.user_id == user.id, UserLesson.course_id == course.id))
+    assert q_ul.scalar_one_or_none() is not None
+
+    # 5. Call unenroll API endpoint
+    response = await client.post(
+        f"/api/v1/courses/{course.id}/unenroll",
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["data"]["course_id"] == course.id
+
+    # 6. Verify that UserCourse, UserModules, and UserLessons are deleted
+    await db_session.commit()
+    
+    # Check if UserCourse is deleted
+    result_uc = await db_session.execute(select(UserCourse).where(UserCourse.user_id == user.id, UserCourse.course_id == course.id))
+    assert result_uc.scalar_one_or_none() is None
+
+    # Check if UserModule is deleted
+    result_um = await db_session.execute(select(UserModule).where(UserModule.user_id == user.id, UserModule.course_id == course.id))
+    assert result_um.scalar_one_or_none() is None
+
+    # Check if UserLesson is deleted
+    result_ul = await db_session.execute(select(UserLesson).where(UserLesson.user_id == user.id, UserLesson.course_id == course.id))
+    assert result_ul.scalar_one_or_none() is None
+
+    # Check if total_enrollees is decremented to 0
+    await db_session.refresh(course)
+    assert course.total_enrollees == 0

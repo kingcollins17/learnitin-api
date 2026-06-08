@@ -122,3 +122,9 @@ class FreePlanLimitsResponse(BaseModel):
     learning_journeys_limit: int
     lessons_limit: int
     audio_lessons_limit: int
+
+
+class PremiumPlanLimitsResponse(BaseModel):
+    """Response schema for premium plan limits."""
+
+    bonus_credits: int

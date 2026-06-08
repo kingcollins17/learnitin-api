@@ -15,8 +15,9 @@ async def create_test_db():
     )
 
     async with conn.cursor() as cursor:
-        await cursor.execute(f"CREATE DATABASE IF NOT EXISTS {db_name}")
-        print(f"Database {db_name} created successfully.")
+        await cursor.execute(f"DROP DATABASE IF EXISTS {db_name}")
+        await cursor.execute(f"CREATE DATABASE {db_name}")
+        print(f"Database {db_name} dropped and created successfully.")
 
     conn.close()
 

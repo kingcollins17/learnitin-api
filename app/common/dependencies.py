@@ -63,12 +63,22 @@ from app.features.lessons.service import LessonService, UserLessonService
 from app.features.notifications.repository import NotificationRepository
 from app.features.notifications.service import NotificationService
 
+# --- Credits ---
+from app.features.credits.repository import CreditRepository
+from app.features.credits.service import CreditService
+
 # --- Subscriptions ---
 from app.features.subscriptions.repository import SubscriptionRepository
 from app.features.subscriptions.usage_repository import SubscriptionUsageRepository
 from app.features.subscriptions.service import SubscriptionService
 from app.features.subscriptions.usage_service import SubscriptionUsageService
 from app.features.subscriptions.google_play_service import GooglePlayService
+
+from app.features.app_configs.repository import AppConfigRepository
+from app.features.app_configs.service import AppConfigService
+from app.features.streaks.repository import StreakRepository
+from app.features.streaks.service import StreakService
+
 
 
 # ========== Repositories ==========
@@ -151,6 +161,12 @@ def get_notification_repository(
     session: AsyncSession = Depends(get_async_session),
 ) -> NotificationRepository:
     return NotificationRepository(session)
+
+
+def get_credit_repository(
+    session: AsyncSession = Depends(get_async_session),
+) -> CreditRepository:
+    return CreditRepository(session)
 
 
 def get_subscription_repository(
@@ -254,6 +270,12 @@ def get_fcm_service() -> FirebaseFCMService:
 # ========== Normal Services ==========
 
 
+def get_credit_service(
+    repo: CreditRepository = Depends(get_credit_repository),
+) -> CreditService:
+    return CreditService(repo)
+
+
 def get_user_service(
     repo: UserRepository = Depends(get_user_repository),
 ) -> UserService:
@@ -277,8 +299,9 @@ def get_otp_service(
 def get_auth_service(
     user_service: UserService = Depends(get_user_service),
     otp_service: OTPService = Depends(get_otp_service),
+    credit_service: CreditService = Depends(get_credit_service),
 ) -> AuthService:
-    return AuthService(user_service, otp_service)
+    return AuthService(user_service, otp_service, credit_service)
 
 
 def get_review_service(
@@ -291,15 +314,17 @@ def get_review_service(
 
 def get_category_service(
     category_repo: CategoryRepository = Depends(get_category_repository),
+    storage_service: FirebaseStorageService = Depends(get_firebase_storage_service),
 ) -> CategoryService:
-    return CategoryService(category_repo)
+    return CategoryService(category_repo, storage_service)
 
 
 def get_subcategory_service(
     subcategory_repo: SubCategoryRepository = Depends(get_subcategory_repository),
     category_repo: CategoryRepository = Depends(get_category_repository),
+    storage_service: FirebaseStorageService = Depends(get_firebase_storage_service),
 ) -> SubCategoryService:
-    return SubCategoryService(subcategory_repo, category_repo)
+    return SubCategoryService(subcategory_repo, category_repo, storage_service)
 
 
 _image_generation_service = ImageGenerationService(_settings)
@@ -315,6 +340,8 @@ def get_course_service(
     lesson_repo: LessonRepository = Depends(get_lesson_repository),
     user_course_repo: UserCourseRepository = Depends(get_user_course_repository),
     review_repo: ReviewRepository = Depends(get_review_repository),
+    category_repo: CategoryRepository = Depends(get_category_repository),
+    subcategory_repo: SubCategoryRepository = Depends(get_subcategory_repository),
     storage_service: FirebaseStorageService = Depends(get_firebase_storage_service),
     image_gen_service: ImageGenerationService = Depends(get_image_generation_service),
 ) -> CourseService:
@@ -324,6 +351,8 @@ def get_course_service(
         lesson_repo,
         user_course_repo,
         review_repo,
+        category_repo,
+        subcategory_repo,
         storage_service,
         image_gen_service,
     )
@@ -387,6 +416,7 @@ def get_user_lesson_service(
     user_course_repo: UserCourseRepository = Depends(get_user_course_repository),
     user_module_repo: UserModuleRepository = Depends(get_user_module_repository),
     user_module_service: UserModuleService = Depends(get_user_module_service),
+    credit_service: CreditService = Depends(get_credit_service),
 ) -> UserLessonService:
     return UserLessonService(
         user_lesson_repository=user_lesson_repo,
@@ -394,6 +424,7 @@ def get_user_lesson_service(
         user_course_repository=user_course_repo,
         user_module_repository=user_module_repo,
         user_module_service=user_module_service,
+        credit_service=credit_service,
     )
 
 
@@ -483,3 +514,33 @@ def get_admin_service(
         storage_service=storage_service,
         maintenance_service=maintenance_service,
     )
+
+
+# ============= App Configs =============
+def get_app_config_repository(
+    session: AsyncSession = Depends(get_async_session),
+) -> AppConfigRepository:
+    return AppConfigRepository(session)
+
+
+def get_app_config_service(
+    repo: AppConfigRepository = Depends(get_app_config_repository),
+) -> AppConfigService:
+    return AppConfigService(repo)
+
+
+# ============= Streaks =============
+def get_streak_repository(
+    session: AsyncSession = Depends(get_async_session),
+) -> StreakRepository:
+    return StreakRepository(session)
+
+
+def get_streak_service(
+    repo: StreakRepository = Depends(get_streak_repository),
+    user_course_repo: UserCourseRepository = Depends(get_user_course_repository),
+    course_repo: CourseRepository = Depends(get_course_repository),
+    credit_service: CreditService = Depends(get_credit_service),
+) -> StreakService:
+    return StreakService(repo, user_course_repo, course_repo, credit_service)
+

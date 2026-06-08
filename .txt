@@ -1,2 +1,4 @@
-URL=https://learnitin-api-982845074244.us-central1.run.app
-https://learnitin-api-982845074244.us-central1.run.app
+LIVE_URL=https://learnitin-api-982845074244.us-central1.run.app
+
+
+STAGING_URL=https://learnitin-api.onrender.com

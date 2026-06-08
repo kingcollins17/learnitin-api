@@ -6,7 +6,7 @@ from typing import Optional
 import traceback
 
 from app.common.database.session import get_async_session
-from app.common.deps import get_current_active_user
+from app.common.deps import get_current_active_user, HasSufficientLessonCredits
 from app.common.responses import ApiResponse, success_response
 from app.features.users.models import User
 from app.features.quiz.schemas import QuizResponse
@@ -28,10 +28,10 @@ async def get_quiz(
     generate_if_missing: bool = Query(
         True, description="Generate quiz if it doesn't exist"
     ),
-    session: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user),
     service: QuizService = Depends(get_quiz_service),
     lesson_service: LessonService = Depends(get_lesson_service),
+    user_lesson_service: UserLessonService = Depends(get_user_lesson_service),
 ):
     """
     Get quiz for a specific lesson.
@@ -39,12 +39,28 @@ async def get_quiz(
     If `generate_if_missing` is True and no quiz exists, it will trigger AI generation.
     """
     try:
+        assert current_user.id, 'User ID cannot be None'
 
-        # 1. Check if quiz exists
+        # 1. Check if the quiz is unlocked for the user. If not, unlock it.
+        # This must happen before checking if the quiz exists or generating it.
+        user_lesson = await user_lesson_service.get_user_lesson(
+            user_id=current_user.id,
+            lesson_id=lesson_id,
+        )
+        if not user_lesson:
+            raise HTTPException(status_code=404, detail='User lesson not found')
+        if not user_lesson.is_quiz_unlocked:
+            await user_lesson_service.unlock_quiz(
+                user_id=current_user.id,
+                lesson_id=lesson_id,
+            )
+            await user_lesson_service.commit_all()
+
+        # 2. Check if quiz exists
         quiz = await service.get_quiz_by_lesson(lesson_id)
 
         if not quiz and generate_if_missing:
-            # 2. Get lesson details to ensure it exists and has content
+            # 3. Get lesson details to ensure it exists and has content
             lesson = await lesson_service.get_lesson_by_id(lesson_id)
             if not lesson:
                 raise HTTPException(
@@ -58,7 +74,7 @@ async def get_quiz(
                     detail="Lesson content is empty. Cannot generate quiz.",
                 )
 
-            # 3. Generate quiz
+            # 4. Generate quiz
             quiz = await service.generate_and_save_quiz(lesson)
 
         if not quiz:
@@ -89,6 +105,8 @@ async def generate_quiz(
     current_user: User = Depends(get_current_active_user),
     service: QuizService = Depends(get_quiz_service),
     lesson_service: LessonService = Depends(get_lesson_service),
+    user_lesson_service: UserLessonService = Depends(get_user_lesson_service),
+    _credits: User = Depends(HasSufficientLessonCredits("quiz")),
 ):
     """
     Manually trigger AI generation for a lesson quiz.
@@ -97,7 +115,6 @@ async def generate_quiz(
     unless we implement deletion or update logic.
     """
     try:
-
         # 1. Check if lesson exists
         lesson = await lesson_service.get_lesson_by_id(lesson_id)
         if not lesson:
@@ -112,10 +129,23 @@ async def generate_quiz(
                 detail="Lesson content is empty. Cannot generate quiz.",
             )
 
-        # 2. Check if quiz exists - if so, we might want to delete it or return error
+        # Ensure the quiz is unlocked (and credits deducted) via the service if not already unlocked
+        assert current_user.id, 'User ID cannot be None'
+        user_lesson = await user_lesson_service.get_user_lesson(
+            user_id=current_user.id,
+            lesson_id=lesson_id,
+        )
+        assert user_lesson, 'User lesson not found'
+        if not user_lesson.is_quiz_unlocked:
+            await user_lesson_service.unlock_quiz(
+                user_id=current_user.id,
+                lesson_id=lesson_id,
+            )
+            await user_lesson_service.commit_all()
+
+        # 2. Check if quiz exists - if so, return it
         existing = await service.get_quiz_by_lesson(lesson_id)
         if existing:
-            # For now, let's just return the existing one or tell them to delete first
             return success_response(
                 data=existing,
                 details="Quiz already exists. Use GET to retrieve it.",

@@ -24,6 +24,7 @@ from app.features.subscriptions.usage_service import SubscriptionUsageService
 from app.services.audio_conversion_service import AudioConversionService
 from app.features.lessons.schemas import CompleteLessonResult
 from app.features.lessons.schemas import UserLessonResponse
+from app.features.credits.service import CreditService
 from app.common.service import Commitable
 from app.common.events import LogEvent, LogLevel, event_bus
 
@@ -410,12 +411,14 @@ class UserLessonService(Commitable):
         user_course_repository: UserCourseRepository,
         user_module_repository: UserModuleRepository,
         user_module_service: UserModuleService,
+        credit_service: CreditService,
     ):
         self.user_lesson_repo = user_lesson_repository
         self.lesson_repo = lesson_repository
         self.user_course_repo = user_course_repository
         self.user_module_repo = user_module_repository
         self.user_module_service = user_module_service
+        self.credit_service = credit_service
 
     async def start_lesson(
         self,
@@ -423,8 +426,6 @@ class UserLessonService(Commitable):
         lesson_id: int,
         module_id: int,
         course_id: int,
-        usage_service: Optional[SubscriptionUsageService] = None,
-        subscription: Optional[Subscription] = None,
     ) -> UserLesson:
         """
         Start a lesson for a user (create user lesson record).
@@ -514,11 +515,7 @@ class UserLessonService(Commitable):
             user_course.updated_at = datetime.now(timezone.utc)
             await self.user_course_repo.update(user_course)
 
-        # Increment usage if service and subscription are provided
-        if usage_service and subscription:
-            await usage_service.increment_usage(
-                subscription, SubscriptionResourceType.LESSON
-            )
+
 
         return created_user_lesson
 
@@ -651,8 +648,6 @@ class UserLessonService(Commitable):
         self,
         user_id: int,
         lesson_id: int,
-        usage_service: Optional[SubscriptionUsageService] = None,
-        subscription: Optional[Subscription] = None,
     ) -> UserLesson:
         """
         Unlock audio for a lesson.
@@ -672,11 +667,55 @@ class UserLessonService(Commitable):
             update_data={"is_audio_unlocked": True},
         )
 
-        # Increment usage if service and subscription are provided
-        if usage_service and subscription:
-            await usage_service.increment_usage(
-                subscription, SubscriptionResourceType.AUDIO
+
+
+        return user_lesson
+
+    async def unlock_quiz(
+        self,
+        user_id: int,
+        lesson_id: int,
+    ) -> UserLesson:
+        """
+        Unlock quiz for a lesson.
+
+        Args:
+            user_id: ID of the user
+            lesson_id: ID of the lesson
+
+        Returns:
+            Updated UserLesson object
+        """
+        user_lesson = await self.get_user_lesson(user_id=user_id, lesson_id=lesson_id)
+        if not user_lesson:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User lesson not found",
             )
+
+        if not user_lesson.is_quiz_unlocked:
+            # Get the lesson details to find quiz_credit_cost and title
+            lesson = await self.lesson_repo.get_by_id(lesson_id)
+            if not lesson:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Lesson not found",
+                )
+
+            # Spend credits
+            from app.features.credits.models import CreditTransactionType
+            await self.credit_service.spend_credits(
+                user_id=user_id,
+                amount=lesson.quiz_credit_cost,
+                transaction_type=CreditTransactionType.QUIZ_GENERATION,
+                description=f"Unlocked quiz for lesson: {lesson.title}",
+                reference_id=str(lesson_id),
+                reference_type="lesson",
+            )
+
+            user_lesson.is_quiz_unlocked = True
+            user_lesson.updated_at = datetime.now(timezone.utc)
+            await self.user_lesson_repo.update(user_lesson)
 
         return user_lesson
 
@@ -718,6 +757,16 @@ class UserLessonService(Commitable):
                 detail="Lesson not found",
             )
 
+        # Check if already completed to prevent duplicate counting
+        existing_user_lesson = await self.user_lesson_repo.get_by_user_and_lesson(
+            user_id=user_id, lesson_id=lesson_id
+        )
+        is_already_completed = (
+            existing_user_lesson.status == ProgressStatus.COMPLETED
+            if existing_user_lesson
+            else False
+        )
+
         user_lesson = await self.update_user_lesson(
             user_id=user_id,
             lesson_id=lesson_id,
@@ -733,6 +782,12 @@ class UserLessonService(Commitable):
         user_course = await self.user_course_repo.get_by_user_and_course(
             user_id=user_id, course_id=lesson.course_id
         )
+
+        if user_course and not is_already_completed:
+            user_course.completed_lessons += 1
+            user_course.updated_at = datetime.now(timezone.utc)
+            await self.user_course_repo.update(user_course)
+
         has_completed_course = (
             user_course.status == ProgressStatus.COMPLETED if user_course else False
         )
@@ -749,3 +804,4 @@ class UserLessonService(Commitable):
         await self.lesson_repo.session.commit()
         await self.user_course_repo.session.commit()
         await self.user_module_repo.session.commit()
+        await self.credit_service.commit_all()

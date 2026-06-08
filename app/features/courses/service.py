@@ -22,8 +22,9 @@ from app.features.courses.models import (
 )
 from app.features.modules.models import Module
 from app.features.lessons.models import Lesson
-from app.features.modules.repository import ModuleRepository
-from app.features.lessons.repository import LessonRepository
+from datetime import datetime, timezone
+from app.features.modules.repository import ModuleRepository, UserModuleRepository
+from app.features.lessons.repository import LessonRepository, UserLessonRepository
 from app.features.courses.repository import (
     UserCourseRepository,
     CategoryRepository,
@@ -54,6 +55,8 @@ class CourseService(Commitable):
         lesson_repository: LessonRepository,
         user_course_repository: UserCourseRepository,
         review_repository: ReviewRepository,
+        category_repository: CategoryRepository,
+        subcategory_repository: SubCategoryRepository,
         storage_service: FirebaseStorageService,
         image_gen_service: ImageGenerationService,
     ):
@@ -62,6 +65,8 @@ class CourseService(Commitable):
         self.lesson_repository = lesson_repository
         self.user_course_repository = user_course_repository
         self.review_repository = review_repository
+        self.category_repository = category_repository
+        self.subcategory_repository = subcategory_repository
         self.storage_service = storage_service
         self.image_gen_service = image_gen_service
 
@@ -72,11 +77,34 @@ class CourseService(Commitable):
         await self.lesson_repository.session.commit()
         await self.user_course_repository.session.commit()
         await self.review_repository.session.commit()
+        await self.category_repository.session.commit()
+        await self.subcategory_repository.session.commit()
+
+    async def _adjust_category_popularity(self, category_id: Optional[int], adjustment: float) -> None:
+        """Adjust the popularity score of a category."""
+        if not category_id:
+            return
+        category = await self.category_repository.get_by_id(category_id, use_cache=False)
+        if category:
+            category.popularity_score = max(0.0, category.popularity_score + adjustment)
+            await self.category_repository.update(category)
+
+    async def _adjust_subcategory_popularity(self, subcategory_id: Optional[int], adjustment: float) -> None:
+        """Adjust the popularity score of a subcategory."""
+        if not subcategory_id:
+            return
+        subcategory = await self.subcategory_repository.get_by_id(subcategory_id)
+        if subcategory:
+            subcategory.popularity_score = max(0.0, subcategory.popularity_score + adjustment)
+            await self.subcategory_repository.update(subcategory)
 
     async def create_course(
         self,
         user_id: int,
         course_data: CourseOutline,
+        category_id: Optional[int] = None,
+        sub_category_id: Optional[int] = None,
+        is_public: bool = False,
     ) -> CourseResponse:
         """
         Create a new course from a course outline.
@@ -84,6 +112,9 @@ class CourseService(Commitable):
         Args:
             user_id: ID of the user creating the course
             course_data: Course outline containing modules and lessons
+            category_id: Optional category ID to assign
+            sub_category_id: Optional sub-category ID to assign
+            is_public: Whether the course should be public (default: False)
 
         Returns:
             Created Course object
@@ -94,9 +125,11 @@ class CourseService(Commitable):
             title=course_data.title,
             description=course_data.description,
             duration=course_data.duration,
-            is_public=False,  # Default to private
+            is_public=is_public,
             learning_pace=LearningPace.BALANCED,  # Default values
             level=course_data.level,
+            category_id=category_id,
+            sub_category_id=sub_category_id,
         )
 
         course = await self.repository.create(course)
@@ -130,8 +163,17 @@ class CourseService(Commitable):
                     description=f"Duration: {lesson_data.duration}",
                     objectives=json.dumps(lesson_data.objectives),
                     order=j,
+                    credit_cost=lesson_data.credit_cost,
+                    audio_credit_cost=lesson_data.audio_credit_cost,
+                    quiz_credit_cost=lesson_data.quiz_credit_cost,
                 )
                 await self.lesson_repository.create(lesson)
+
+        if course.is_public and course.category_id:
+            await self._adjust_category_popularity(course.category_id, 1.0)
+
+        if course.sub_category_id:
+            await self._adjust_subcategory_popularity(course.sub_category_id, 1.0)
 
         return CourseResponse.model_validate(course)
 
@@ -147,7 +189,7 @@ class CourseService(Commitable):
         """
         try:
             # Fetch course from database
-            course = await self.repository.get_by_id(course_id)
+            course = await self.repository.get_by_id(course_id, use_cache=False)
             if not course:
                 print(f"Course not found for image generation: {course_id}")
                 return None
@@ -181,8 +223,6 @@ class CourseService(Commitable):
         self,
         user_id: int,
         course_id: int,
-        usage_service: Optional[SubscriptionUsageService] = None,
-        subscription: Optional[Subscription] = None,
     ) -> UserCourseResponse:
         """
         Enroll a user in a course.
@@ -210,21 +250,28 @@ class CourseService(Commitable):
                 detail="User is already enrolled in this course",
             )
 
+        # Fetch total lessons for the course
+        lessons = await self.lesson_repository.get_by_course_id(course_id, limit=9999)
+        total_lessons = len(lessons)
+
         # Create enrollment
-        user_course = UserCourse(user_id=user_id, course_id=course_id)
+        user_course = UserCourse(
+            user_id=user_id,
+            course_id=course_id,
+            total_lessons=total_lessons,
+            completed_lessons=0
+        )
         user_course = await self.user_course_repository.create(user_course)
 
         # Increment total_enrollees
-        course = await self.repository.get_by_id(course_id)
+        course = await self.repository.get_by_id(course_id, use_cache=False)
         if course:
             course.total_enrollees += 1
             await self.repository.update(course)
+            if course.is_public and course.category_id:
+                await self._adjust_category_popularity(course.category_id, 0.1)
 
-        # Increment usage if service and subscription are provided
-        if usage_service and subscription:
-            await usage_service.increment_usage(
-                subscription, SubscriptionResourceType.JOURNEY
-            )
+
 
         # Emit course enrolled event
         assert user_course.id
@@ -239,6 +286,47 @@ class CourseService(Commitable):
             return UserCourseResponse.model_validate(user_course)
 
         return UserCourseResponse.model_validate(user_course_with_details)
+
+    async def unenroll_course(self, user_id: int, course_id: int) -> None:
+        """
+        Unenroll a user from a course.
+
+        Deletes the UserCourse record and all associated UserModules and UserLessons.
+        Decrements the course enrollees count.
+        """
+        # Fetch enrollment
+        user_course = await self.user_course_repository.get_by_user_and_course(
+            user_id=user_id, course_id=course_id, use_cache=False
+        )
+
+        if not user_course:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User is not enrolled in this course",
+            )
+
+        # 1. Delete associated user lessons
+        user_lesson_repo = UserLessonRepository(self.user_course_repository.session)
+        user_lessons = await user_lesson_repo.get_by_user_and_course(user_id=user_id, course_id=course_id)
+        for ul in user_lessons:
+            await user_lesson_repo.delete(ul)
+
+        # 2. Delete associated user modules
+        user_module_repo = UserModuleRepository(self.user_course_repository.session)
+        user_modules = await user_module_repo.get_by_user_and_course(user_id=user_id, course_id=course_id)
+        for um in user_modules:
+            await user_module_repo.delete(um)
+
+        # 3. Delete user course enrollment
+        await self.user_course_repository.delete(user_course)
+
+        # 4. Decrement total_enrollees
+        course = await self.repository.get_by_id(course_id, use_cache=False)
+        if course:
+            course.total_enrollees = max(0, course.total_enrollees - 1)
+            await self.repository.update(course)
+            if course.is_public and course.category_id:
+                await self._adjust_category_popularity(course.category_id, -0.1)
 
     def _create_slug(self, text: str) -> str:
         """Create a URL-friendly slug from text."""
@@ -257,6 +345,7 @@ class CourseService(Commitable):
         sub_category_id: Optional[int] = None,
         min_enrollees: Optional[int] = None,
         search: Optional[str] = None,
+        sort_by_popularity: bool = False,
     ) -> List[CourseResponse]:
         """
         Get all courses with pagination and filters.
@@ -269,6 +358,7 @@ class CourseService(Commitable):
             category_id: Filter by category ID
             sub_category_id: Filter by sub-category ID
             min_enrollees: Filter by minimum number of enrollees
+            sort_by_popularity: Sort by popularity score (default: False)
 
         Returns:
             List of courses matching the filters
@@ -283,6 +373,7 @@ class CourseService(Commitable):
             sub_category_id=sub_category_id,
             min_enrollees=min_enrollees,
             search=search,
+            sort_by_popularity=sort_by_popularity,
         )
         course_responses = [CourseResponse.model_validate(course) for course in courses]
         return await self._attach_review_summaries(course_responses)
@@ -383,7 +474,7 @@ class CourseService(Commitable):
         return courses
 
     async def update_course(
-        self, user_id: int, course_id: int, course_update: dict
+        self, user_id: int, course_id: int, course_update: dict, is_admin: bool = False
     ) -> CourseResponse:
         """
         Update a course.
@@ -392,6 +483,7 @@ class CourseService(Commitable):
             user_id: ID of the user attempting to update
             course_id: ID of the course to update
             course_update: Dictionary of fields to update
+            is_admin: Whether the user is an admin
 
         Returns:
             Updated Course object
@@ -399,7 +491,7 @@ class CourseService(Commitable):
         Raises:
             HTTPException: If course not found or user is not the creator
         """
-        course = await self.repository.get_by_id(course_id)
+        course = await self.repository.get_by_id(course_id, use_cache=False)
 
         if not course:
             raise HTTPException(
@@ -407,15 +499,22 @@ class CourseService(Commitable):
                 detail="Course not found",
             )
 
-        # Only the course creator can update it
-        if course.user_id != user_id:
+        # Only the course creator or an admin can update it
+        if not is_admin and course.user_id != user_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to update this course",
             )
 
+        # Non-admins cannot update popularity_score or total_enrollees
+        if not is_admin:
+            course_update.pop("popularity_score", None)
+            course_update.pop("total_enrollees", None)
+
         # Update only provided fields
-        from datetime import datetime, timezone
+        old_is_public = course.is_public
+        old_category_id = course.category_id
+        old_subcategory_id = course.sub_category_id
 
         for field, value in course_update.items():
             if value is not None and hasattr(course, field):
@@ -423,6 +522,24 @@ class CourseService(Commitable):
 
         # Update timestamp
         course.updated_at = datetime.now(timezone.utc)
+
+        new_is_public = course.is_public
+        new_category_id = course.category_id
+        new_subcategory_id = course.sub_category_id
+
+        # Adjust popularity score if is_public or category_id changes
+        if old_is_public and new_is_public and old_category_id != new_category_id:
+            await self._adjust_category_popularity(old_category_id, -1.0)
+            await self._adjust_category_popularity(new_category_id, 1.0)
+        elif not old_is_public and new_is_public:
+            await self._adjust_category_popularity(new_category_id, 1.0)
+        elif old_is_public and not new_is_public:
+            await self._adjust_category_popularity(old_category_id, -1.0)
+
+        # Adjust subcategory popularity score if sub_category_id changes
+        if old_subcategory_id != new_subcategory_id:
+            await self._adjust_subcategory_popularity(old_subcategory_id, -1.0)
+            await self._adjust_subcategory_popularity(new_subcategory_id, 1.0)
 
         updated_course = await self.repository.update(course)
         return CourseResponse.model_validate(updated_course)
@@ -441,7 +558,7 @@ class CourseService(Commitable):
         Raises:
             HTTPException: If course not found, user is not the creator, or course has more than 1 enrollee
         """
-        course = await self.repository.get_by_id(course_id)
+        course = await self.repository.get_by_id(course_id, use_cache=False)
 
         if not course:
             raise HTTPException(
@@ -465,10 +582,10 @@ class CourseService(Commitable):
 
         # Update is_public to False
         course.is_public = False
+        if course.category_id:
+            await self._adjust_category_popularity(course.category_id, -1.0 - (course.total_enrollees * 0.1))
 
         # Update timestamp
-        from datetime import datetime, timezone
-
         course.updated_at = datetime.now(timezone.utc)
 
         updated_course = await self.repository.update(course)
@@ -485,7 +602,7 @@ class CourseService(Commitable):
         Raises:
             HTTPException: If course not found, user is not the creator, or course is public
         """
-        course = await self.repository.get_by_id(course_id)
+        course = await self.repository.get_by_id(course_id, use_cache=False)
 
         if not course:
             raise HTTPException(
@@ -522,9 +639,10 @@ class CourseService(Commitable):
 class CategoryService(Commitable):
     """Service for category business logic."""
 
-    def __init__(self, category_repository: CategoryRepository):
+    def __init__(self, category_repository: CategoryRepository, storage_service: FirebaseStorageService):
 
         self.category_repository = category_repository
+        self.storage_service = storage_service
 
     async def commit_all(self) -> None:
         """Commit all active sessions in the service's repositories."""
@@ -545,18 +663,30 @@ class CategoryService(Commitable):
         category = Category(**category_data)
         return await self.category_repository.create(category)
 
+    async def get_category_by_id(self, category_id: int) -> Category:
+        """Get a category by ID."""
+        category = await self.category_repository.get_by_id(category_id)
+        if not category:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Category not found",
+            )
+        return category
+
     async def get_categories(
-        self, page: int = 1, per_page: int = 100
+        self, page: int = 1, per_page: int = 100, search: Optional[str] = None, sort_by_popularity: bool = True
     ) -> List[Category]:
         """Get all categories."""
         skip = (page - 1) * per_page
-        return await self.category_repository.get_all(skip=skip, limit=per_page)
+        return await self.category_repository.get_all(
+            skip=skip, limit=per_page, search=search, sort_by_popularity=sort_by_popularity
+        )
 
     async def update_category(
         self, category_id: int, category_update: dict
     ) -> Category:
         """Update a category."""
-        category = await self.category_repository.get_by_id(category_id)
+        category = await self.category_repository.get_by_id(category_id, use_cache=False)
         if not category:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -572,12 +702,15 @@ class CategoryService(Commitable):
 
     async def delete_category(self, category_id: int) -> None:
         """Delete a category."""
-        category = await self.category_repository.get_by_id(category_id)
+        category = await self.category_repository.get_by_id(category_id, use_cache=False)
         if not category:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Category not found",
             )
+
+        if category.image_url:
+            self.storage_service.delete_file(category.image_url)
 
         await self.category_repository.delete(category)
 
@@ -589,10 +722,12 @@ class SubCategoryService(Commitable):
         self,
         subcategory_repository: SubCategoryRepository,
         category_repository: CategoryRepository,
+        storage_service: FirebaseStorageService,
     ):
 
         self.subcategory_repository = subcategory_repository
         self.category_repository = category_repository
+        self.storage_service = storage_service
 
     async def commit_all(self) -> None:
         """Commit all active sessions in the service's repositories."""
@@ -624,16 +759,33 @@ class SubCategoryService(Commitable):
         sub_category = SubCategory(**sub_category_data)
         return await self.subcategory_repository.create(sub_category)
 
-    async def get_subcategories(
-        self, page: int = 1, per_page: int = 100, category_id: Optional[int] = None
-    ) -> List[SubCategory]:
-        """Get all sub-categories, optionally filtered by category."""
-        skip = (page - 1) * per_page
-        if category_id:
-            return await self.subcategory_repository.get_by_category_id(
-                category_id=category_id, skip=skip, limit=per_page
+    async def get_subcategory_by_id(self, sub_category_id: int) -> SubCategory:
+        """Get a sub-category by ID."""
+        sub_category = await self.subcategory_repository.get_by_id(sub_category_id)
+        if not sub_category:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Sub-category not found",
             )
-        return await self.subcategory_repository.get_all(skip=skip, limit=per_page)
+        return sub_category
+
+    async def get_subcategories(
+        self,
+        page: int = 1,
+        per_page: int = 100,
+        category_id: Optional[int] = None,
+        search: Optional[str] = None,
+        sort_by_popularity: bool = False,
+    ) -> List[SubCategory]:
+        """Get all sub-categories, optionally filtered by category, search query, and sorted by popularity."""
+        skip = (page - 1) * per_page
+        return await self.subcategory_repository.get_all(
+            skip=skip,
+            limit=per_page,
+            category_id=category_id,
+            search=search,
+            sort_by_popularity=sort_by_popularity,
+        )
 
     async def update_subcategory(
         self, sub_category_id: int, sub_category_update: dict
@@ -675,5 +827,8 @@ class SubCategoryService(Commitable):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Sub-category not found",
             )
+
+        if sub_category.image_url:
+            self.storage_service.delete_file(sub_category.image_url)
 
         await self.subcategory_repository.delete(sub_category)

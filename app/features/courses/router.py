@@ -1,13 +1,18 @@
 """Course API endpoints."""
 
-from fastapi import APIRouter, Depends, status, HTTPException, Query, BackgroundTasks
-from typing import List
+from app.common.deps import get_current_user
+from app.common.events import LogEvent, LogLevel, event_bus
+from typing import Literal
+from fastapi import APIRouter, Depends, status, HTTPException, Query, BackgroundTasks, File, UploadFile
+from typing import List, Optional
 import traceback
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.database.session import get_async_session
-from app.common.deps import get_current_active_user, get_current_active_user_optional
+from app.common.deps import get_current_active_user, get_current_active_user_optional, HasSufficientCredits, get_active_admin
+from app.common.config import settings
 from app.common.responses import ApiResponse, success_response
 from app.features.users.models import User
+from app.services.storage_service import FirebaseStorageService
 from app.common.dependencies import (
     get_course_service,
     get_category_service,
@@ -16,6 +21,8 @@ from app.common.dependencies import (
     get_db_maintenance_service,
     DBMaintenanceService,
     run_db_maintenance_in_bg,
+    get_credit_service,
+    get_firebase_storage_service,
 )
 from app.features.subscriptions.dependencies import (
     ResourceAccessControl,
@@ -51,6 +58,8 @@ from app.features.courses.service import (
 )
 from app.features.courses.generation_service import CourseGenerationService
 from app.features.courses.tasks import generate_course_image_background
+from app.features.credits.service import CreditService
+from app.features.credits.models import CreditTransactionType
 
 router = APIRouter()
 
@@ -59,10 +68,9 @@ router = APIRouter()
 async def generate_courses(
     request: CourseGenerationRequest,
     current_user: User = Depends(get_current_active_user),
-    _access: None = Depends(ResourceAccessControl(SubscriptionResourceType.JOURNEY)),
-    subscription: Subscription = Depends(get_user_subscription),
-    usage_service: SubscriptionUsageService = Depends(get_subscription_usage_service),
     service: CourseGenerationService = Depends(get_course_generation_service),
+    _credits: User = Depends(HasSufficientCredits(credit_requirement=settings.COURSE_GENERATION_COST)),
+    credit_service: CreditService = Depends(get_credit_service),
 ):
     """
     Generate personalized course curricula using AI.
@@ -77,11 +85,21 @@ async def generate_courses(
     """
     try:
         # Generate courses via service
-        outlines = await service.generate_courses(request, usage_service, subscription)
+        outlines = await service.generate_courses(request)
 
         # Set the level for each generated course
         for outline in outlines:
             outline.level = request.level
+
+        # Spend credits
+        assert current_user.id
+        await credit_service.spend_credits(
+            user_id=current_user.id,
+            amount=settings.COURSE_GENERATION_COST,
+            transaction_type=CreditTransactionType.COURSE_GENERATION,
+            description=f"Generated course curriculum on topic: {request.topic}",
+        )
+        await credit_service.commit_all()
 
         return success_response(
             data=CourseGenerationResponse(courses=outlines),
@@ -101,6 +119,10 @@ async def generate_courses(
 @router.post("/create", response_model=ApiResponse[CourseResponse])
 async def create_course(
     course_data: CourseOutline,
+    category_id: Optional[int] = Query(None, description="Category ID to assign to the course"),
+    sub_category_id: Optional[int] = Query(None, description="Sub-category ID to assign to the course"),
+    enroll: bool = Query(True, description="Whether to enroll the creator in the course"),
+    is_public: bool = Query(False, description="Whether the course should be public"),
     service: CourseService = Depends(get_course_service),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -112,11 +134,18 @@ async def create_course(
     """
     try:
         assert current_user.id  # Ensure user has an ID
-        course = await service.create_course(current_user.id, course_data)
+        course = await service.create_course(
+            user_id=current_user.id,
+            course_data=course_data,
+            category_id=category_id,
+            sub_category_id=sub_category_id,
+            is_public=is_public,
+        )
 
         # Enroll the creator in the course (optional: could pass usage here too if tracking)
-        assert course.id
-        await service.enroll_course(current_user.id, course.id)
+        if enroll:
+            assert course.id
+            await service.enroll_course(current_user.id, course.id)
 
         return success_response(data=course, details="Course created successfully")
     except Exception as e:
@@ -125,6 +154,19 @@ async def create_course(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create course: {str(e)}",
         )
+
+
+@router.get("/credit-cost", response_model=ApiResponse[dict])
+async def get_course_credit_cost():
+    """
+    Get the credit cost required to generate a new course.
+    response.data - ```{"credit_cost": 10}```
+    **No authentication required.**
+    """
+    return success_response(
+        data={"credit_cost": settings.COURSE_GENERATION_COST},
+        details="Course credit cost retrieved successfully",
+    )
 
 
 @router.patch("/{course_id}", response_model=ApiResponse[CourseResponse])
@@ -156,7 +198,9 @@ async def update_course(
             user_id=current_user.id,
             course_id=course_id,
             course_update=update_data,
+            is_admin=current_user.is_superuser,
         )
+        await service.commit_all()
 
         return success_response(
             data=updated_course,
@@ -219,7 +263,7 @@ async def publish_course(
     publish_data: CoursePublishRequest,
     background_tasks: BackgroundTasks,
     service: CourseService = Depends(get_course_service),
-    current_user: User = Depends(get_premium_user),
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Publish a course to make it public.
@@ -243,11 +287,12 @@ async def publish_course(
             course_id=course_id,
             course_update=update_data,
         )
+        await service.commit_all()
 
         # Generate image in background if it's missing
         if not updated_course.image_url:
             background_tasks.add_task(
-                generate_course_image_background, course_id, service
+                generate_course_image_background, course_id
             )
 
         return success_response(
@@ -285,6 +330,7 @@ async def unpublish_course(
             user_id=current_user.id,
             course_id=course_id,
         )
+        await service.commit_all()
 
         return success_response(
             data=updated_course,
@@ -305,9 +351,6 @@ async def enroll_course(
     course_id: int,
     service: CourseService = Depends(get_course_service),
     current_user: User = Depends(get_current_active_user),
-    _access: None = Depends(ResourceAccessControl(SubscriptionResourceType.JOURNEY)),
-    subscription: Subscription = Depends(get_user_subscription),
-    usage_service: SubscriptionUsageService = Depends(get_subscription_usage_service),
 ):
     """
     Enroll the current user in a course.
@@ -317,7 +360,7 @@ async def enroll_course(
     try:
         assert current_user.id  # Ensure user has an ID
         user_course = await service.enroll_course(
-            current_user.id, course_id, usage_service, subscription
+            current_user.id, course_id
         )
 
         return success_response(
@@ -330,6 +373,36 @@ async def enroll_course(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to enroll in course: {str(e)}",
+        )
+
+
+@router.post("/{course_id}/unenroll", response_model=ApiResponse[dict])
+async def unenroll_course(
+    course_id: int,
+    service: CourseService = Depends(get_course_service),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Unenroll the current user from a course.
+
+    Deletes the UserCourse record and all associated UserModules and UserLessons.
+    """
+    try:
+        assert current_user.id  # Ensure user has an ID
+        await service.unenroll_course(
+            current_user.id, course_id
+        )
+
+        return success_response(
+            data={"course_id": course_id}, details="Successfully unenrolled from course"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to unenroll from course: {str(e)}",
         )
 
 
@@ -427,12 +500,12 @@ async def get_user_course_detail(
 async def create_category(
     category_data: CategoryCreate,
     service: CategoryService = Depends(get_category_service),
-    current_user: User = Depends(get_current_active_user),
+    admin: User = Depends(get_active_admin),
 ):
     """
     Create a new category.
 
-    **Authentication required.**
+    **Admin only.**
     """
     try:
         category = await service.create_category(category_data.model_dump())
@@ -455,6 +528,8 @@ async def create_category(
 async def get_categories(
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     per_page: int = Query(100, ge=1, le=100, description="Items per page"),
+    search: Optional[str] = Query(None, description="Search categories by name or description"),
+    sort_by_popularity: bool = Query(False, description="Whether to sort categories by popularity score"),
     service: CategoryService = Depends(get_category_service),
 ):
     """
@@ -463,7 +538,9 @@ async def get_categories(
     **No authentication required.**
     """
     try:
-        categories = await service.get_categories(page=page, per_page=per_page)
+        categories = await service.get_categories(
+            page=page, per_page=per_page, search=search, sort_by_popularity=sort_by_popularity
+        )
 
         return success_response(
             data=categories,
@@ -477,17 +554,43 @@ async def get_categories(
         )
 
 
+@router.get("/categories/{category_id}", response_model=ApiResponse[CategoryResponse])
+async def get_category_by_id(
+    category_id: int,
+    service: CategoryService = Depends(get_category_service),
+):
+    """
+    Get a category by ID.
+
+    **No authentication required.**
+    """
+    try:
+        category = await service.get_category_by_id(category_id)
+        return success_response(
+            data=category,
+            details="Category retrieved successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch category: {str(e)}",
+        )
+
+
 @router.patch("/categories/{category_id}", response_model=ApiResponse[CategoryResponse])
 async def update_category(
     category_id: int,
     category_update: CategoryUpdate,
     service: CategoryService = Depends(get_category_service),
-    current_user: User = Depends(get_current_active_user),
+    admin: User = Depends(get_active_admin),
 ):
     """
     Update a category.
 
-    **Authentication required.**
+    **Admin only.**
     """
     try:
         updated_category = await service.update_category(
@@ -513,12 +616,12 @@ async def update_category(
 async def delete_category(
     category_id: int,
     service: CategoryService = Depends(get_category_service),
-    current_user: User = Depends(get_current_active_user),
+    admin: User = Depends(get_active_admin),
 ):
     """
     Delete a category.
 
-    **Authentication required.**
+    **Admin only.**
     """
     try:
         await service.delete_category(category_id)
@@ -544,12 +647,12 @@ async def delete_category(
 async def create_subcategory(
     sub_category_data: SubCategoryCreate,
     service: SubCategoryService = Depends(get_subcategory_service),
-    current_user: User = Depends(get_current_active_user),
+    admin: User = Depends(get_active_admin),
 ):
     """
     Create a new sub-category.
 
-    **Authentication required.**
+    **Admin only.**
     """
     try:
         sub_category = await service.create_subcategory(sub_category_data.model_dump())
@@ -573,6 +676,8 @@ async def get_subcategories(
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     per_page: int = Query(100, ge=1, le=100, description="Items per page"),
     category_id: int | None = Query(None, description="Filter by category ID"),
+    search: Optional[str] = Query(None, description="Search sub-categories by name or description"),
+    sort_by_popularity: bool = Query(False, description="Whether to sort sub-categories by popularity score"),
     service: SubCategoryService = Depends(get_subcategory_service),
 ):
     """
@@ -582,7 +687,11 @@ async def get_subcategories(
     """
     try:
         sub_categories = await service.get_subcategories(
-            page=page, per_page=per_page, category_id=category_id
+            page=page,
+            per_page=per_page,
+            category_id=category_id,
+            search=search,
+            sort_by_popularity=sort_by_popularity,
         )
 
         return success_response(
@@ -597,6 +706,32 @@ async def get_subcategories(
         )
 
 
+@router.get("/sub-categories/{sub_category_id}", response_model=ApiResponse[SubCategoryResponse])
+async def get_subcategory_by_id(
+    sub_category_id: int,
+    service: SubCategoryService = Depends(get_subcategory_service),
+):
+    """
+    Get a sub-category by ID.
+
+    **No authentication required.**
+    """
+    try:
+        sub_category = await service.get_subcategory_by_id(sub_category_id)
+        return success_response(
+            data=sub_category,
+            details="Sub-category retrieved successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch sub-category: {str(e)}",
+        )
+
+
 @router.patch(
     "/sub-categories/{sub_category_id}", response_model=ApiResponse[SubCategoryResponse]
 )
@@ -604,12 +739,12 @@ async def update_subcategory(
     sub_category_id: int,
     sub_category_update: SubCategoryUpdate,
     service: SubCategoryService = Depends(get_subcategory_service),
-    current_user: User = Depends(get_current_active_user),
+    admin: User = Depends(get_active_admin),
 ):
     """
     Update a sub-category.
 
-    **Authentication required.**
+    **Admin only.**
     """
     try:
         updated_sub_category = await service.update_subcategory(
@@ -659,6 +794,98 @@ async def delete_subcategory(
         )
 
 
+@router.post("/categories-or-subcategories/upload-image", response_model=ApiResponse[dict])
+async def upload_category_or_subcategory_image(
+    type:Literal['category', 'subcategory']= Query(..., description="Specify 'category' or 'subcategory'"),
+    id: int = Query(..., description="The ID of the category or subcategory to update"),
+    file: UploadFile = File(..., description="The image file to upload"),
+    current_user: User = Depends(get_active_admin),
+    category_service: CategoryService = Depends(get_category_service),
+    subcategory_service: SubCategoryService = Depends(get_subcategory_service),
+    storage_service: FirebaseStorageService = Depends(get_firebase_storage_service),
+):
+    """
+    Upload an image for a category or subcategory.
+
+    Uploads the image file to the `/category` subfolder in the Firebase storage bucket.
+
+    If type is 'category', only administrators can upload images.
+    """
+    try:
+        # Check permissions for categories
+        if type == "category" and not current_user.is_superuser:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only administrators can upload category images",
+            )
+
+        # Read the file content
+        file_bytes = await file.read()
+        if not file_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File is empty",
+            )
+
+        # Generate destination path in bucket: sub folder /category
+        import uuid
+        file_ext = file.filename.split(".")[-1] if file.filename and "." in file.filename else "png"
+        # Force a safe filename
+        destination_path = f"category/{type}_{id}_{uuid.uuid4()}.{file_ext}"
+
+        # Upload using storage_service
+        image_url = storage_service.upload_bytes(
+            data=file_bytes,
+            destination_path=destination_path,
+            content_type=file.content_type or "image/png",
+        )
+
+        # Update category or subcategory in DB
+        result_data = {}
+        if type == "category":
+            updated_item = await category_service.update_category(id, {"image_url": image_url})
+            await category_service.commit_all()
+            result_data = {
+                "id": updated_item.id,
+                "name": updated_item.name,
+                "description": updated_item.description,
+                "image_url": updated_item.image_url,
+                "created_at": updated_item.created_at,
+            }
+        else:
+            updated_item = await subcategory_service.update_subcategory(id, {"image_url": image_url})
+            await subcategory_service.commit_all()
+            result_data = {
+                "id": updated_item.id,
+                "category_id": updated_item.category_id,
+                "name": updated_item.name,
+                "description": updated_item.description,
+                "image_url": updated_item.image_url,
+                "created_at": updated_item.created_at,
+            }
+
+        return success_response(
+            data=result_data,
+            details=f"Successfully uploaded and assigned image for {type}",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        await event_bus.dispatch(
+            LogEvent(
+                level=LogLevel.ERROR,
+                message=f"Failed to upload image: {str(e)}",
+                data={"error": str(e), "traceback": traceback.format_exc()},
+            )
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload image: {str(e)}",
+        )
+
+
 # General course endpoints
 @router.get("", response_model=ApiResponse[PaginatedCoursesResponse])
 async def get_courses(
@@ -667,15 +894,17 @@ async def get_courses(
     is_public: bool | None = Query(None, description="Filter by public/private"),
     level: CourseLevel | None = Query(None, description="Filter by course level"),
     category_id: int | None = Query(None, description="Filter by category ID"),
+    sub_category_id: int | None = Query(None, description="Filter by subcategory ID"),
     min_enrollees: int | None = Query(None, ge=0, description="Minimum enrollees"),
     search: str | None = Query(None, description="Search for a course by title"),
+    sort_by_popularity: bool = Query(False, description="Whether to sort courses by popularity score"),
     service: CourseService = Depends(get_course_service),
     _maintenance: None = Depends(run_db_maintenance_in_bg),
 ):
     """
     Get all courses with pagination and optional filters.
 
-    Courses are ordered by total enrollees (highest first).
+    Courses are ordered by total enrollees (highest first) by default.
 
     **Query Parameters:**
     - `page`: Page number (default: 1)
@@ -683,6 +912,7 @@ async def get_courses(
     - `is_public`: Filter by public courses (optional)
     - `level`: Filter by course level (beginner, intermediate, expert) (optional)
     - `min_enrollees`: Filter by minimum number of enrollees (optional)
+    - `sort_by_popularity`: Whether to sort by popularity score (optional)
 
     **No authentication required** - returns public courses by default.
     """
@@ -693,8 +923,10 @@ async def get_courses(
             is_public=is_public,
             level=level,
             category_id=category_id,
+            sub_category_id=sub_category_id,
             min_enrollees=min_enrollees,
             search=search,
+            sort_by_popularity=sort_by_popularity,
         )
 
         return success_response(
@@ -752,7 +984,7 @@ async def get_course_detail(
         # Generate image in background if it's missing
         if not course.image_url:
             background_tasks.add_task(
-                generate_course_image_background, course_id, service
+                generate_course_image_background, course_id, 
             )
 
         return success_response(

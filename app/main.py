@@ -16,6 +16,9 @@ from app.features.subscriptions.router import router as subscriptions_router
 from app.features.logs.router import router as logs_router
 from app.features.reviews.router import router as reviews_router
 from app.features.admin.router import router as admin_router
+from app.features.credits.router import router as credits_router
+from app.features.app_configs.router import router as app_configs_router
+from app.features.streaks.router import router as streaks_router
 from app.features.notifications.handlers import handle_in_app_push_for_fcm, handle_multicast_push_for_fcm
 from app.features.logs.handlers import handle_log_event
 from app.common.events import NotificationInAppPushEvent, NotificationMulticastPushEvent, LogEvent
@@ -123,9 +126,14 @@ app.include_router(
     tags=["Quizzes"],
 )
 app.include_router(
+    app_configs_router,
+    prefix=f"{settings.API_V1_PREFIX}/app-configs",
+    tags=["App Configurations"],
+)
+app.include_router(
     subscriptions_router,
     prefix=f"{settings.API_V1_PREFIX}/billing",
-    tags=["Subscriptions"],
+    tags=["Subscriptions & Billing (Credit Packs purchase)"],
 )
 app.include_router(
     logs_router,
@@ -141,6 +149,16 @@ app.include_router(
     admin_router,
     prefix=f"{settings.API_V1_PREFIX}/admin",
     tags=["Admin"],
+)
+app.include_router(
+    credits_router,
+    prefix=f"{settings.API_V1_PREFIX}/credits",
+    tags=["Credits"],
+)
+app.include_router(
+    streaks_router,
+    prefix=f"{settings.API_V1_PREFIX}/streaks",
+    tags=["Streaks"],
 )
 
 

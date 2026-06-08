@@ -15,6 +15,9 @@ class LessonOverview(BaseModel):
     duration: str = Field(
         description="Estimated duration (e.g., '30 minutes', '1 hour')"
     )
+    credit_cost: int = Field(default=0, description="The credit cost to generate this lesson's content")
+    audio_credit_cost: int = Field(default=0, description="The credit cost to generate this lesson's audio")
+    quiz_credit_cost: int = Field(default=0, description="The credit cost to generate this lesson's quiz")
 
 
 class ModuleOverview(BaseModel):
@@ -26,7 +29,7 @@ class ModuleOverview(BaseModel):
     objectives: Optional[List[str]] = Field(
         default=None, description="Learning objectives for this module"
     )
-    lessons: List[LessonOverview] = Field(description="List of lessons in this module")
+    lessons: List[LessonOverview] = Field(description="List of lessons in this module", default=[])
 
 
 class CourseOutline(BaseModel):
@@ -77,6 +80,8 @@ class CategoryBase(BaseModel):
 
     name: Optional[str] = None
     description: Optional[str] = None
+    image_url: Optional[str] = None
+    popularity_score: Optional[float] = 0.0
 
 
 class CategoryCreate(CategoryBase):
@@ -90,6 +95,8 @@ class CategoryUpdate(BaseModel):
 
     name: Optional[str] = None
     description: Optional[str] = None
+    image_url: Optional[str] = None
+    popularity_score: Optional[float] = None
 
 
 class CategoryResponse(CategoryBase):
@@ -108,6 +115,8 @@ class SubCategoryBase(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     category_id: Optional[int] = None
+    image_url: Optional[str] = None
+    popularity_score: Optional[float] = 0.0
 
 
 class SubCategoryCreate(SubCategoryBase):
@@ -122,6 +131,8 @@ class SubCategoryUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     category_id: Optional[int] = None
+    image_url: Optional[str] = None
+    popularity_score: Optional[float] = None
 
 
 class SubCategoryResponse(SubCategoryBase):
@@ -145,6 +156,7 @@ class CourseBase(BaseModel):
     is_public: Optional[bool] = False
     category_id: Optional[int] = None
     sub_category_id: Optional[int] = None
+    popularity_score: Optional[float] = 0.0
 
 
 class CourseCreate(CourseBase):
@@ -163,6 +175,8 @@ class CourseUpdate(BaseModel):
     is_public: Optional[bool] = None
     category_id: Optional[int] = None
     sub_category_id: Optional[int] = None
+    popularity_score: Optional[float] = None
+    total_enrollees: Optional[int] = None
 
 
 class CoursePublishRequest(BaseModel):
@@ -199,6 +213,9 @@ class LessonResponse(BaseModel):
     description: Optional[str] = None
     objectives: Optional[str] = None  # JSON string of objectives list
     order: Optional[int] = None
+    credit_cost: int = 0
+    audio_credit_cost: int = 0
+    quiz_credit_cost: int = 0
 
     class Config:
         from_attributes = True
@@ -212,7 +229,7 @@ class ModuleResponse(BaseModel):
     description: Optional[str] = None
     objectives: Optional[str] = None  # JSON string of objectives list
     order: Optional[int] = None
-    lessons: Optional[List[LessonResponse]] = []
+    lessons: Optional[List[LessonResponse]] = Field(default_factory=list)
 
     class Config:
         from_attributes = True
@@ -221,7 +238,7 @@ class ModuleResponse(BaseModel):
 class CourseDetailResponse(CourseResponse):
     """Schema for course detail response including modules."""
 
-    modules: Optional[List[ModuleResponse]] = []
+    modules: Optional[List[ModuleResponse]] = Field(default_factory=list)
 
 
 class UserCourseResponse(BaseModel):
@@ -235,6 +252,8 @@ class UserCourseResponse(BaseModel):
     total_modules: Optional[int] = None
     current_module_id: Optional[int] = None
     current_lesson_id: Optional[int] = None
+    completed_lessons: Optional[int] = None
+    total_lessons: Optional[int] = None
     course: Optional[CourseResponse] = None
 
     class Config:

@@ -19,9 +19,12 @@ from app.common.dependencies import (
     get_notification_service,
     get_course_repository,
     get_module_repository,
+    get_credit_service,
+    get_streak_service,
 )
+from app.features.streaks.service import StreakService
 from app.features.notifications.service import NotificationService
-from app.common.deps import get_current_active_user
+from app.common.deps import get_current_active_user, HasSufficientLessonCredits
 from app.common.responses import ApiResponse, success_response
 from app.features.users.models import User
 from app.features.subscriptions.dependencies import (
@@ -48,6 +51,7 @@ from app.features.lessons.schemas import (
     CompleteLessonResponse,
 )
 from app.features.lessons.service import LessonService, UserLessonService
+from app.features.credits.service import CreditService
 
 
 from app.features.lessons.tasks import (
@@ -133,6 +137,7 @@ async def get_lesson(
     user_lesson_service: UserLessonService = Depends(get_user_lesson_service),
     notification_service: NotificationService = Depends(get_notification_service),
     current_user: User = Depends(get_current_active_user),
+    credit_service: CreditService = Depends(get_credit_service),
 ):
     """
     Get a specific lesson by ID.
@@ -170,6 +175,7 @@ async def get_lesson(
                     lesson_id=lesson_id,
                     lesson_service=service,
                     notification_service=notification_service,
+                    credit_service=credit_service,
                     user_id=current_user.id,
                     course_id=lesson.course_id,
                     module_id=lesson.module_id,
@@ -233,13 +239,14 @@ async def update_lesson(
 async def start_lesson(
     lesson_id: int,
     background_tasks: BackgroundTasks,
+    timezone: str = Query("UTC", description="User local timezone"),
     lesson_service: LessonService = Depends(get_lesson_service),
     user_lesson_service: UserLessonService = Depends(get_user_lesson_service),
     notification_service: NotificationService = Depends(get_notification_service),
+    streak_service: StreakService = Depends(get_streak_service),
     current_user: User = Depends(get_current_active_user),
-    _access: None = Depends(ResourceAccessControl(SubscriptionResourceType.LESSON)),
-    subscription: Subscription = Depends(get_user_subscription),
-    usage_service: SubscriptionUsageService = Depends(get_subscription_usage_service),
+    _credits: User = Depends(HasSufficientLessonCredits("content")),
+    credit_service: CreditService = Depends(get_credit_service),
 ):
     """
     Start a lesson (create user lesson progress record).
@@ -275,10 +282,19 @@ async def start_lesson(
             lesson_id=lesson_id,
             module_id=lesson.module_id,
             course_id=lesson.course_id,
-            usage_service=usage_service,
-            subscription=subscription,
+           
         )
         await user_lesson_service.user_lesson_repo.session.commit()
+
+        # Log streak progress event
+        await streak_service.log_progress_event(
+            user_id=current_user.id,
+            course_id=lesson.course_id,
+            lesson_id=lesson_id,
+            event_type="lesson_started",
+            timezone_str=timezone,
+        )
+        await streak_service.commit_all()
 
         # 3. Check and handle content availability
         is_content_available = True
@@ -293,6 +309,7 @@ async def start_lesson(
                     lesson_id=lesson_id,
                     lesson_service=lesson_service,
                     notification_service=notification_service,
+                    credit_service=credit_service,
                     user_id=current_user.id,
                     course_id=lesson.course_id,
                     module_id=lesson.module_id,
@@ -498,9 +515,8 @@ async def unlock_audio(
     lesson_service: LessonService = Depends(get_lesson_service),
     user_lesson_service: UserLessonService = Depends(get_user_lesson_service),
     current_user: User = Depends(get_current_active_user),
-    _access: None = Depends(ResourceAccessControl(SubscriptionResourceType.AUDIO)),
-    subscription: Subscription = Depends(get_user_subscription),
-    usage_service: SubscriptionUsageService = Depends(get_subscription_usage_service),
+    _credits: User = Depends(HasSufficientLessonCredits("audio")),
+    credit_service: CreditService = Depends(get_credit_service),
 ):
     """
     Unlock audio for a lesson.
@@ -522,8 +538,6 @@ async def unlock_audio(
         user_lesson = await user_lesson_service.unlock_audio(
             user_id=current_user.id,
             lesson_id=lesson_id,
-            usage_service=usage_service,
-            subscription=subscription,
         )
         await user_lesson_service.commit_all()
 
@@ -544,6 +558,7 @@ async def unlock_audio(
                     generate_audio_background,
                     lesson_id=lesson_id,
                     lesson_service=lesson_service,
+                    credit_service=credit_service,
                     user_id=current_user.id,
                 )
                 message = "Audio is being prepared. Please check back shortly."
@@ -572,11 +587,49 @@ async def unlock_audio(
 
 
 @router.post(
+    "/user/lessons/unlock-quiz", response_model=ApiResponse[UserLessonResponse]
+)
+async def unlock_quiz(
+    lesson_id: int = Query(..., description="ID of the lesson"),
+    user_lesson_service: UserLessonService = Depends(get_user_lesson_service),
+    current_user: User = Depends(get_current_active_user),
+    _credits: User = Depends(HasSufficientLessonCredits("quiz")),
+):
+    """
+    Unlock quiz for a lesson.
+    """
+    try:
+        assert current_user.id
+
+        # Unlock quiz and deduct credits inside the service
+        user_lesson = await user_lesson_service.unlock_quiz(
+            user_id=current_user.id,
+            lesson_id=lesson_id,
+        )
+        await user_lesson_service.commit_all()
+
+        return success_response(
+            data=user_lesson,
+            details="Quiz unlocked successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to unlock quiz: {str(e)}",
+        )
+
+
+@router.post(
     "/user/lessons/complete-quiz", response_model=ApiResponse[UserLessonResponse]
 )
 async def complete_quiz(
     lesson_id: int = Query(..., description="ID of the lesson"),
+    timezone: str = Query("UTC", description="User local timezone"),
     service: UserLessonService = Depends(get_user_lesson_service),
+    streak_service: StreakService = Depends(get_streak_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -590,6 +643,16 @@ async def complete_quiz(
             user_id=current_user.id,
             lesson_id=lesson_id,
         )
+
+        # Log streak progress event
+        await streak_service.log_progress_event(
+            user_id=current_user.id,
+            course_id=user_lesson.course_id,
+            lesson_id=lesson_id,
+            event_type="quiz_completed",
+            timezone_str=timezone,
+        )
+        await streak_service.commit_all()
 
         return success_response(
             data=user_lesson,
@@ -610,7 +673,9 @@ async def complete_quiz(
 )
 async def complete_lesson(
     lesson_id: int = Query(..., description="ID of the lesson"),
+    timezone: str = Query("UTC", description="User local timezone"),
     service: UserLessonService = Depends(get_user_lesson_service),
+    streak_service: StreakService = Depends(get_streak_service),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -631,6 +696,15 @@ async def complete_lesson(
             has_completed_course=result.has_completed_course,
         )
 
+        # Log streak progress event
+        await streak_service.log_progress_event(
+            user_id=current_user.id,
+            course_id=result.user_lesson.course_id,
+            lesson_id=lesson_id,
+            event_type="lesson_completed",
+            timezone_str=timezone,
+        )
+
         # Dispatch event if course completed
         if result.has_completed_course:
             await event_bus.dispatch(
@@ -639,6 +713,8 @@ async def complete_lesson(
                     user_id=current_user.id,
                 )
             )
+
+        await streak_service.commit_all()
 
         return success_response(
             data=response_data,
@@ -659,8 +735,10 @@ async def complete_lesson(
 )
 async def get_lesson_audios(
     lesson_id: int,
+    background_tasks: BackgroundTasks,
     service: LessonService = Depends(get_lesson_service),
     current_user: User = Depends(get_current_active_user),
+    credit_service: CreditService = Depends(get_credit_service),
 ):
     """
     Get all audio segments for a lesson.
@@ -677,9 +755,27 @@ async def get_lesson_audios(
             user_id=current_user.id, lesson_id=lesson_id
         )
 
+        message = f"Retrieved {len(audios)} audio segment(s)"
+
+        if not audios:
+            if not audio_tracker.is_in_progress(lesson_id):
+                lesson = await service.get_lesson_by_id(lesson_id)
+                if lesson and lesson.content:
+                    if audio_tracker.start_tracking(lesson_id, current_user.id):
+                        background_tasks.add_task(
+                            generate_audio_background,
+                            lesson_id=lesson_id,
+                            lesson_service=service,
+                            credit_service=credit_service,
+                            user_id=current_user.id,
+                        )
+                        message = "Audio is being generated. Please check back shortly."
+            else:
+                message = "Audio generation is already in progress. Please check back shortly."
+
         return success_response(
             data=audios,
-            details=f"Retrieved {len(audios)} audio segment(s)",
+            details=message,
         )
     except HTTPException:
         raise

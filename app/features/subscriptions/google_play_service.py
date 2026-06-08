@@ -87,7 +87,7 @@ class GooglePlayService:
             # For simplicity in this implementation, we use the sync call.
             # In high-load scenarios, consider offloading to a thread pool.
             request = (
-                service.purchases()
+                service.purchases()  # type: ignore
                 .subscriptions()
                 .get(
                     packageName=self.package_name,
@@ -100,3 +100,32 @@ class GooglePlayService:
         except Exception as e:
             # Log error
             raise RuntimeError(f"Google Play API verification failed: {str(e)}")
+
+    async def verify_product(self, product_id: str, purchase_token: str):
+        """Verify a one-time product purchase."""
+        if settings.GOOGLE_PLAY_MOCK:
+            from datetime import datetime, timezone
+            logger.info(f"MOCK MODE: Verifying product {product_id}")
+            return {
+                "kind": "androidpublisher#productPurchase",
+                "purchaseTimeMillis": str(int(datetime.now().timestamp() * 1000)),
+                "purchaseState": 0,  # 0 = Purchased
+                "consumptionState": 0,
+                "acknowledgementState": 1,
+            }
+            
+        service = self._get_service()
+        try:
+            request = (
+                service.purchases()  # type: ignore
+                .products()
+                .get(
+                    packageName=self.package_name,
+                    productId=product_id,
+                    token=purchase_token,
+                )
+            )
+            response = request.execute()
+            return response
+        except Exception as e:
+            raise RuntimeError(f"Google Play API product verification failed: {str(e)}")
