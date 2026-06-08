@@ -372,6 +372,36 @@ async def enroll_course(
         )
 
 
+@router.post("/{course_id}/unenroll", response_model=ApiResponse[dict])
+async def unenroll_course(
+    course_id: int,
+    service: CourseService = Depends(get_course_service),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Unenroll the current user from a course.
+
+    Deletes the UserCourse record and all associated UserModules and UserLessons.
+    """
+    try:
+        assert current_user.id  # Ensure user has an ID
+        await service.unenroll_course(
+            current_user.id, course_id
+        )
+
+        return success_response(
+            data={"course_id": course_id}, details="Successfully unenrolled from course"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to unenroll from course: {str(e)}",
+        )
+
+
 # User course endpoints (must come before /{course_id} to avoid path conflicts)
 @router.get("/user/courses", response_model=ApiResponse[PaginatedUserCoursesResponse])
 async def get_user_courses(

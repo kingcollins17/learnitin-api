@@ -22,8 +22,9 @@ from app.features.courses.models import (
 )
 from app.features.modules.models import Module
 from app.features.lessons.models import Lesson
-from app.features.modules.repository import ModuleRepository
-from app.features.lessons.repository import LessonRepository
+from datetime import datetime, timezone
+from app.features.modules.repository import ModuleRepository, UserModuleRepository
+from app.features.lessons.repository import LessonRepository, UserLessonRepository
 from app.features.courses.repository import (
     UserCourseRepository,
     CategoryRepository,
@@ -83,7 +84,7 @@ class CourseService(Commitable):
         """Adjust the popularity score of a category."""
         if not category_id:
             return
-        category = await self.category_repository.get_by_id(category_id)
+        category = await self.category_repository.get_by_id(category_id, use_cache=False)
         if category:
             category.popularity_score = max(0.0, category.popularity_score + adjustment)
             await self.category_repository.update(category)
@@ -188,7 +189,7 @@ class CourseService(Commitable):
         """
         try:
             # Fetch course from database
-            course = await self.repository.get_by_id(course_id)
+            course = await self.repository.get_by_id(course_id, use_cache=False)
             if not course:
                 print(f"Course not found for image generation: {course_id}")
                 return None
@@ -263,7 +264,7 @@ class CourseService(Commitable):
         user_course = await self.user_course_repository.create(user_course)
 
         # Increment total_enrollees
-        course = await self.repository.get_by_id(course_id)
+        course = await self.repository.get_by_id(course_id, use_cache=False)
         if course:
             course.total_enrollees += 1
             await self.repository.update(course)
@@ -285,6 +286,47 @@ class CourseService(Commitable):
             return UserCourseResponse.model_validate(user_course)
 
         return UserCourseResponse.model_validate(user_course_with_details)
+
+    async def unenroll_course(self, user_id: int, course_id: int) -> None:
+        """
+        Unenroll a user from a course.
+
+        Deletes the UserCourse record and all associated UserModules and UserLessons.
+        Decrements the course enrollees count.
+        """
+        # Fetch enrollment
+        user_course = await self.user_course_repository.get_by_user_and_course(
+            user_id=user_id, course_id=course_id, use_cache=False
+        )
+
+        if not user_course:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User is not enrolled in this course",
+            )
+
+        # 1. Delete associated user lessons
+        user_lesson_repo = UserLessonRepository(self.user_course_repository.session)
+        user_lessons = await user_lesson_repo.get_by_user_and_course(user_id=user_id, course_id=course_id)
+        for ul in user_lessons:
+            await user_lesson_repo.delete(ul)
+
+        # 2. Delete associated user modules
+        user_module_repo = UserModuleRepository(self.user_course_repository.session)
+        user_modules = await user_module_repo.get_by_user_and_course(user_id=user_id, course_id=course_id)
+        for um in user_modules:
+            await user_module_repo.delete(um)
+
+        # 3. Delete user course enrollment
+        await self.user_course_repository.delete(user_course)
+
+        # 4. Decrement total_enrollees
+        course = await self.repository.get_by_id(course_id, use_cache=False)
+        if course:
+            course.total_enrollees = max(0, course.total_enrollees - 1)
+            await self.repository.update(course)
+            if course.is_public and course.category_id:
+                await self._adjust_category_popularity(course.category_id, -0.1)
 
     def _create_slug(self, text: str) -> str:
         """Create a URL-friendly slug from text."""
@@ -449,7 +491,7 @@ class CourseService(Commitable):
         Raises:
             HTTPException: If course not found or user is not the creator
         """
-        course = await self.repository.get_by_id(course_id)
+        course = await self.repository.get_by_id(course_id, use_cache=False)
 
         if not course:
             raise HTTPException(
@@ -470,8 +512,6 @@ class CourseService(Commitable):
             course_update.pop("total_enrollees", None)
 
         # Update only provided fields
-        from datetime import datetime, timezone
-
         old_is_public = course.is_public
         old_category_id = course.category_id
         old_subcategory_id = course.sub_category_id
@@ -518,7 +558,7 @@ class CourseService(Commitable):
         Raises:
             HTTPException: If course not found, user is not the creator, or course has more than 1 enrollee
         """
-        course = await self.repository.get_by_id(course_id)
+        course = await self.repository.get_by_id(course_id, use_cache=False)
 
         if not course:
             raise HTTPException(
@@ -546,8 +586,6 @@ class CourseService(Commitable):
             await self._adjust_category_popularity(course.category_id, -1.0 - (course.total_enrollees * 0.1))
 
         # Update timestamp
-        from datetime import datetime, timezone
-
         course.updated_at = datetime.now(timezone.utc)
 
         updated_course = await self.repository.update(course)
@@ -564,7 +602,7 @@ class CourseService(Commitable):
         Raises:
             HTTPException: If course not found, user is not the creator, or course is public
         """
-        course = await self.repository.get_by_id(course_id)
+        course = await self.repository.get_by_id(course_id, use_cache=False)
 
         if not course:
             raise HTTPException(
@@ -648,7 +686,7 @@ class CategoryService(Commitable):
         self, category_id: int, category_update: dict
     ) -> Category:
         """Update a category."""
-        category = await self.category_repository.get_by_id(category_id)
+        category = await self.category_repository.get_by_id(category_id, use_cache=False)
         if not category:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -664,7 +702,7 @@ class CategoryService(Commitable):
 
     async def delete_category(self, category_id: int) -> None:
         """Delete a category."""
-        category = await self.category_repository.get_by_id(category_id)
+        category = await self.category_repository.get_by_id(category_id, use_cache=False)
         if not category:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
