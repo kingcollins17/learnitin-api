@@ -512,6 +512,7 @@ async def unlock_lesson(
 async def unlock_audio(
     background_tasks: BackgroundTasks,
     lesson_id: int = Query(..., description="ID of the lesson"),
+    provider: Optional[str] = Query(None, description="Audio TTS provider ('google' or 'deepgram')"),
     lesson_service: LessonService = Depends(get_lesson_service),
     user_lesson_service: UserLessonService = Depends(get_user_lesson_service),
     current_user: User = Depends(get_current_active_user),
@@ -560,6 +561,7 @@ async def unlock_audio(
                     lesson_service=lesson_service,
                     credit_service=credit_service,
                     user_id=current_user.id,
+                    provider=provider,
                 )
                 message = "Audio is being prepared. Please check back shortly."
             else:
@@ -736,6 +738,7 @@ async def complete_lesson(
 async def get_lesson_audios(
     lesson_id: int,
     background_tasks: BackgroundTasks,
+    provider: Optional[str] = Query(None, description="Audio TTS provider ('google' or 'deepgram')"),
     service: LessonService = Depends(get_lesson_service),
     current_user: User = Depends(get_current_active_user),
     credit_service: CreditService = Depends(get_credit_service),
@@ -768,6 +771,7 @@ async def get_lesson_audios(
                             lesson_service=service,
                             credit_service=credit_service,
                             user_id=current_user.id,
+                            provider=provider,
                         )
                         message = "Audio is being generated. Please check back shortly."
             else:

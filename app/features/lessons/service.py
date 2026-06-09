@@ -18,13 +18,17 @@ from app.features.modules.service import UserModuleService
 from app.features.courses.repository import CourseRepository, UserCourseRepository
 from app.features.lessons.lecture_service import LectureConversionService
 from app.services.audio_generation_service import AudioGenerationService
+from app.services.deepgram_audio_service import DeepgramAudioService
 from app.services.storage_service import FirebaseStorageService
 from app.features.subscriptions.models import Subscription, SubscriptionResourceType
 from app.features.subscriptions.usage_service import SubscriptionUsageService
 from app.services.audio_conversion_service import AudioConversionService
+from app.common.config import Settings
 from app.features.lessons.schemas import CompleteLessonResult
 from app.features.lessons.schemas import UserLessonResponse
 from app.features.credits.service import CreditService
+from app.features.credits.models import CreditTransactionType
+            
 from app.common.service import Commitable
 from app.common.events import LogEvent, LogLevel, event_bus
 
@@ -42,8 +46,10 @@ class LessonService(Commitable):
         generation_service: LessonGenerationService,
         lecture_service: LectureConversionService,
         audio_gen_service: AudioGenerationService,
+        deepgram_audio_service: DeepgramAudioService,
         storage_service: FirebaseStorageService,
         audio_conversion_service: AudioConversionService,
+        settings: Settings,
     ):
         self.repository = lesson_repository
         self.audio_repo = lesson_audio_repository
@@ -53,6 +59,8 @@ class LessonService(Commitable):
         self.generation_service = generation_service
         self.lecture_service = lecture_service
         self.audio_gen_service = audio_gen_service
+        self.deepgram_audio_service = deepgram_audio_service
+        self.settings = settings
         self.storage_service = storage_service
         self.audio_conversion_service = audio_conversion_service
 
@@ -146,12 +154,17 @@ class LessonService(Commitable):
             )
             raise
 
-    async def _process_part(self, part, lesson_id: int) -> Optional[LessonAudio]:
+    async def _process_part(self, part, lesson_id: int, provider: str = "google") -> Optional[LessonAudio]:
         for attempt in range(2):  # 0 for initial try, 1 for retry
             try:
-                audio_bytes = await self.audio_gen_service.generate_audio_mp3(
-                    text=part.script, sample_rate=24000, bitrate="128k"
-                )
+                if provider.lower() == "deepgram":
+                    audio_bytes = await self.deepgram_audio_service.generate_audio(
+                        text=part.script
+                    )
+                else:
+                    audio_bytes = await self.audio_gen_service.generate_audio_mp3(
+                        text=part.script, sample_rate=24000, bitrate="128k"
+                    )
 
                 # Validate audio bytes before uploading
                 if not self.audio_conversion_service.validate_audio_bytes(audio_bytes):
@@ -194,7 +207,9 @@ class LessonService(Commitable):
                     )
                     raise
 
-    async def generate_audio_from_content(self, lesson_id: int) -> List[LessonAudio]:
+    async def generate_audio_from_content(
+        self, lesson_id: int, provider: Optional[str] = None
+    ) -> List[LessonAudio]:
         """
         Generate audio from lesson content in multiple parts.
 
@@ -203,6 +218,7 @@ class LessonService(Commitable):
 
         Args:
             lesson_id: ID of the lesson
+            provider: Audio TTS provider ("google" or "deepgram")
 
         Returns:
             List of created LessonAudio records, or empty list if generation failed
@@ -211,11 +227,15 @@ class LessonService(Commitable):
         if not lesson or not lesson.content:
             return []
 
+        if not provider:
+            provider = self.settings.DEFAULT_AUDIO_PROVIDER
+
         # Generate lecture script parts
         try:
             lecture_parts = await self.lecture_service.generate_lecture_parts(
                 lesson.content,
                 max_parts=4,
+                provider=provider,
             )
         except Exception as e:
             await event_bus.dispatch(
@@ -235,7 +255,7 @@ class LessonService(Commitable):
             return []
 
         # Run audio generation and uploading in parallel for all parts
-        tasks = [self._process_part(part, lesson_id) for part in lecture_parts]
+        tasks = [self._process_part(part, lesson_id, provider=provider) for part in lecture_parts]
         results = await asyncio.gather(*tasks)
 
         created_audios: List[LessonAudio] = []
@@ -703,7 +723,6 @@ class UserLessonService(Commitable):
                 )
 
             # Spend credits
-            from app.features.credits.models import CreditTransactionType
             await self.credit_service.spend_credits(
                 user_id=user_id,
                 amount=lesson.quiz_credit_cost,

@@ -153,7 +153,7 @@ class CreditService(Commitable):
         reference_id: Optional[str] = None,
         reference_type: Optional[str] = None,
         idempotency_key: Optional[str] = None,
-    ) -> CreditLedger:
+    ) -> Optional[CreditLedger]:
         """Spend credits for an action. Hard-blocks on insufficient balance.
 
         Flow:
@@ -179,7 +179,10 @@ class CreditService(Commitable):
             InsufficientCreditsError: If balance < amount.
             DuplicateTransactionError: If idempotency_key already exists.
         """
-        if amount <= 0:
+        amount = abs(amount)
+        if amount == 0:
+            return None
+        if amount < 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Debit amount must be positive.",
