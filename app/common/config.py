@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     # Gemini
     GEMINI_API_KEY: str = Field(default="")
 
+    # Deepgram
+    DEEPGRAM_API_KEY: str = Field(default="")
+
+    # Audio Provider
+    DEFAULT_AUDIO_PROVIDER: str = Field(default="google")
+
     # Email
     EMAIL_FROM: str = Field(default="noreply@learnitin.online")
     RESEND_API_KEY: str = Field(default="")

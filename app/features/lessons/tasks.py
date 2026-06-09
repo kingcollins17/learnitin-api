@@ -32,6 +32,7 @@ async def generate_audio_background(
     lesson_service: LessonService,
     credit_service: CreditService,
     user_id: Optional[int] = None,
+    provider: Optional[str] = None,
 ):
     """
     Background task to generate audio for a lesson.
@@ -79,14 +80,16 @@ async def generate_audio_background(
             print(f"Lesson content is empty for {lesson_id}, cannot generate audio.")
             return
 
-        print(f"Generating audio for lesson {lesson_id}...")
-        created_audios = await lesson_service.generate_audio_from_content(lesson_id)
+        print(f"Generating audio for lesson {lesson_id} using {provider}...")
+        created_audios = await lesson_service.generate_audio_from_content(
+            lesson_id, provider=provider
+        )
 
         print(
             f"Audio generation completed for lesson {lesson_id}: {len(created_audios)} parts created"
         )
 
-        if created_audios and user_id:
+        if created_audios and user_id and lesson.audio_credit_cost > 0:
 
             await credit_service.spend_credits(
                 user_id=user_id,

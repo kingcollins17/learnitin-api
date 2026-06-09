@@ -1,6 +1,6 @@
 """Service for converting lesson content into a lecture script."""
 
-from typing import List
+from typing import List, cast
 from pydantic import BaseModel
 from app.services.langchain_service import LangChainService
 
@@ -16,184 +16,98 @@ class LectureScriptPart(BaseModel):
 class LectureConversionService:
     """Service for converting lesson content into a lecture script."""
 
-    def __init__(
-        self, ai_service: LangChainService, breakdown_service: "LectureBreakdownService"
-    ):
-        self.ai_service = ai_service
-        self.breakdown_service = breakdown_service
-
-    async def convert_to_lecture(self, lesson_content: str) -> str:
-        """
-        Convert lesson markdown content into an in-depth multi-speaker lecture script.
-
-        Args:
-            lesson_content: The markdown content of the lesson.
-
-        Returns:
-            A comprehensive string formatted for text-to-speech with alternating speakers.
-            This output is NOT constrained by word limits - it aims for depth and completeness.
-        """
-        system_prompt = """You are an expert educational scriptwriter.
-Your task is to convert written lesson content into an engaging, natural-sounding audio lecture script for two speakers.
-Speaker 1 (Female) is the main instructor: Knowledgeable, warm, clearer, and leads the lesson.
-Speaker 2 (Male) is the co-host/student: Curious, asks clarifying questions, provides analogies, and summarizes key points.
-
-Rules:
-1. The output MUST be strictly formatted as:
-Speaker 1: [Text]
-Speaker 2: [Text]
-...
-2. Keep the tone conversational, engaging, and easy to follow.
-3. Break down complex concepts into simple explanations.
-4. Ensure the dialogue feels natural, like a podcast or radio show.
-5. Cover ALL key points from the provided lesson content thoroughly and in-depth.
-6. Do NOT use markdown formatting in the output, just plain text with Speaker labels.
-7. Avoid long monologues; keep interactions dynamic.
-8. Be comprehensive - explain concepts fully with examples, analogies, and real-world applications.
-9. Ensure smooth transitions between topics.
-10. The script should feel complete and educational, like a full podcast episode.
-11. **CRITICAL: The TOTAL output must be 1200 words maximum.** If the source content is extremely long, prioritize the most important concepts.
-"""
-
-        user_prompt = """Convert the following lesson content into a comprehensive lecture script:
-
-{lesson_content}
-
-Create an in-depth, thorough lecture that covers all the important concepts with clear explanations.
-Remember: The total output must not exceed 1200 words.
-"""
-
-        lecture_script = await self.ai_service.invoke(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            lesson_content=lesson_content,
-        )
-
-        script_text = str(lecture_script)
-
-        # Log word count for reference
-        word_count = len(script_text.split())
-        print(f"Generated lecture script: {word_count} words")
-
-        return script_text
-
-    async def generate_lecture_parts(
-        self, lesson_content: str, max_parts: int = 10
-    ) -> List[LectureScriptPart]:
-        """
-        Convert lesson content into lecture script parts ready for audio generation.
-
-        This is the main entry point that combines lecture conversion and breakdown
-        into a single operation. It generates an in-depth lecture script from the
-        lesson content, then breaks it down into TTS-compatible parts.
-
-        Args:
-            lesson_content: The markdown content of the lesson.
-
-        Returns:
-            A list of LectureScriptPart objects, each containing:
-            - title: Descriptive title for this part
-            - script: The lecture script text (within TTS word limits)
-            - order: The sequence number for this part
-            max_parts: Maximum number of parts to generate (default: 10)
-        """
-        # Step 1: Convert lesson content to full lecture script
-        full_script = await self.convert_to_lecture(lesson_content)
-
-        # Step 2: Break down into TTS-compatible parts
-        parts = await self.breakdown_service.breakdown_script(
-            full_script, max_parts=max_parts
-        )
-
-        print(f"Generated {len(parts)} lecture parts for audio generation")
-
-        return parts
-
-
-class LectureBreakdownResponse(BaseModel):
-    """Response schema for lecture breakdown."""
-
-    parts: List[LectureScriptPart]
-
-
-class LectureBreakdownService:
-    """Service for breaking down a lecture script into TTS-compatible parts."""
-
     # Maximum words per part to stay within TTS limits
     MAX_WORDS_PER_PART = 450
 
     def __init__(self, ai_service: LangChainService):
         self.ai_service = ai_service
 
-    async def breakdown_script(
-        self, lecture_script: str, max_parts: int = 10
+    async def generate_lecture_parts(
+        self, lesson_content: str, max_parts: int = 10, provider: str = "google"
     ) -> List[LectureScriptPart]:
         """
-        Break down a lecture script into multiple parts, each within TTS word limits.
+        Convert lesson content directly into structured lecture script parts ready for audio generation.
+
+        This single-step operation converts the lesson content into a list of parts within
+        TTS word limits, avoiding multiple LLM calls.
 
         Args:
-            lecture_script: The full lecture script text.
-            max_parts: Maximum number of parts allowed.
+            lesson_content: The markdown content of the lesson.
+            max_parts: Maximum number of parts to generate (default: 10)
+            provider: Audio TTS provider ("google" or "deepgram")
 
         Returns:
-            A list of LectureScriptPart objects, each containing a portion of the script
-            that is within the word limit for text-to-speech generation.
+            A list of LectureScriptPart objects.
         """
-        word_count = len(lecture_script.split())
+        if provider.lower() == "deepgram":
+            system_prompt = """You are an expert educational scriptwriter.
+Your task is to take written lesson content and convert it directly into an engaging, natural-sounding audio monologue lecture script broken down into multiple self-contained parts (maximum {max_parts} parts).
 
-        # If script is already within limits, return as single part
-        if word_count <= self.MAX_WORDS_PER_PART:
-            return [
-                LectureScriptPart(
-                    title="Part 1",
-                    script=lecture_script,
-                    order=1,
-                )
-            ]
-
-        # Use AI to intelligently break down the script with structured output
-        system_prompt = """You are an expert at segmenting lecture scripts for audio production.
-Your task is to break down a long lecture script into multiple parts, where each part:
-1. Is a complete, self-contained segment of ~400-450 words maximum
-2. Ends at a natural break point (end of a topic, transitional moment)
-3. Maintains the Speaker 1:/Speaker 2: format throughout
-4. Has a descriptive title summarizing that part's content
+Each part:
+1. Is a complete, self-contained segment of ~350-450 words maximum (to stay within text-to-speech limits).
+2. Ends at a natural break point (end of a topic, transitional moment).
+3. Must be a single-speaker narrator script. Do NOT use speaker labels (e.g., Speaker 1:, Speaker 2:) or dialogue formatting. Just write a continuous, engaging monologue.
+4. Has a descriptive title summarizing that part's content.
 
 Rules:
-1. Each part should be between 350-450 words to stay within TTS limits.
-2. Never cut off mid-sentence or mid-thought.
-3. Ensure each part can stand alone as a coherent segment.
-4. Maintain speaker continuity - a part should ideally start with Speaker 1.
-5. Create smooth transitions between parts where possible.
-6. Assign order numbers starting from 1.
-7. **CRITICAL: Do NOT generate more than {max_parts} parts.** If the script is too long to fit into {max_parts} parts of 450 words each (~{total_available_words} words total), you MUST shorten the content by picking only the most essential segments or summarizing less important parts to fit within the limit.
+1. Never cut off mid-sentence or mid-thought between parts.
+2. Ensure each part can stand alone as a coherent segment.
+3. Keep the tone conversational, engaging, like an audiobook or documentary narration.
+4. Do NOT use markdown formatting in the script content.
+5. Assign order numbers starting from 1.
+6. **CRITICAL: Do NOT generate more than {max_parts} parts.** If the source content is extremely long, prioritize the most important concepts to fit within the limit.
+"""
+        else:
+            system_prompt = """You are an expert educational scriptwriter.
+Your task is to take written lesson content and convert it directly into an engaging, natural-sounding audio lecture script broken down into multiple self-contained dialogue parts (maximum {max_parts} parts).
+
+Each part:
+1. Is a complete, self-contained segment of ~350-450 words maximum (to stay within text-to-speech limits).
+2. Ends at a natural break point (end of a topic, transitional moment).
+3. Must be strictly formatted with alternating speakers:
+   Speaker 1 (Female) is the main instructor: Knowledgeable, warm, clearer, and leads the lesson.
+   Speaker 2 (Male) is the co-host/student: Curious, asks clarifying questions, provides analogies, and summarizes key points.
+   The text for each part must use:
+   Speaker 1: [Text]
+   Speaker 2: [Text]
+   ...
+4. Has a descriptive title summarizing that part's content.
+
+Rules:
+1. Never cut off mid-sentence or mid-thought between parts.
+2. Ensure each part can stand alone as a coherent segment.
+3. Keep the tone conversational, engaging, like a podcast or radio show.
+4. Do NOT use markdown formatting in the script content, just plain text with Speaker labels.
+5. Assign order numbers starting from 1.
+6. **CRITICAL: Do NOT generate more than {max_parts} parts.** If the source content is extremely long, prioritize the most essential concepts to fit within the limit.
 """
 
-        user_prompt = """Break down the following lecture script into multiple parts of ~400-450 words each.
-        Remember, you are limited to a maximum of {max_parts} parts. Shorten or summarize if necessary.
+        user_prompt = """Convert the following lesson content directly into a structured list of lecture parts (maximum {max_parts} parts) of ~350-450 words each.
 
-        Lecture Script:
-        {lecture_script}
+        Lesson Content:
+        {lesson_content}
 
         Return a structured list of parts with title, script content, and order number.
         """
 
-        breakdown_response: LectureBreakdownResponse = await self.ai_service.invoke(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            response_schema=LectureBreakdownResponse,
-            lecture_script=lecture_script,
-            max_parts=max_parts,
-            total_available_words=max_parts * self.MAX_WORDS_PER_PART,
-        )  # ty:ignore[invalid-assignment]
+        response = cast(
+            LectureBreakdownResponse,
+            await self.ai_service.invoke(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                response_schema=LectureBreakdownResponse,
+                lesson_content=lesson_content,
+                max_parts=max_parts,
+            ),
+        )
 
-        # Validate and adjust if needed
-        validated_parts = self._validate_parts(breakdown_response.parts)
+        parts = self._validate_parts(response.parts, provider=provider)
+        print(f"Generated {len(parts)} lecture parts for audio generation ({provider})")
 
-        return validated_parts
+        return parts
 
     def _validate_parts(
-        self, parts: List[LectureScriptPart]
+        self, parts: List[LectureScriptPart], provider: str = "google"
     ) -> List[LectureScriptPart]:
         """Validate that all parts are within word limits, splitting if necessary."""
         validated = []
@@ -213,7 +127,7 @@ Rules:
                 order += 1
             else:
                 # Part is still too long, do a simple split
-                sub_parts = self._simple_split(part.script, part.title)
+                sub_parts = self._simple_split(part.script, part.title, provider=provider)
                 for sub_part in sub_parts:
                     validated.append(
                         LectureScriptPart(
@@ -226,7 +140,7 @@ Rules:
 
         return validated
 
-    def _simple_split(self, script: str, base_title: str) -> List[LectureScriptPart]:
+    def _simple_split(self, script: str, base_title: str, provider: str = "google") -> List[LectureScriptPart]:
         """Perform a simple word-based split as a fallback."""
         words = script.split()
         parts = []
@@ -238,30 +152,33 @@ Rules:
             if len(current_words) >= self.MAX_WORDS_PER_PART:
                 # Try to find a natural break point (end of speaker line)
                 text = " ".join(current_words)
-                last_speaker_break = max(
-                    text.rfind("\nSpeaker 1:"),
-                    text.rfind("\nSpeaker 2:"),
+                if provider.lower() != "deepgram":
+                    last_speaker_break = max(
+                        text.rfind("\nSpeaker 1:"),
+                        text.rfind("\nSpeaker 2:"),
+                    )
+                    if last_speaker_break > len(text) // 2:
+                        # Found a good break point
+                        parts.append(
+                            LectureScriptPart(
+                                title=f"{base_title} - Part {part_num}",
+                                script=text[:last_speaker_break].strip(),
+                                order=part_num,
+                            )
+                        )
+                        current_words = text[last_speaker_break:].split()
+                        part_num += 1
+                        continue
+
+                # No good break point or deepgram, just split at limit
+                parts.append(
+                    LectureScriptPart(
+                        title=f"{base_title} - Part {part_num}",
+                        script=text.strip(),
+                        order=part_num,
+                    )
                 )
-                if last_speaker_break > len(text) // 2:
-                    # Found a good break point
-                    parts.append(
-                        LectureScriptPart(
-                            title=f"{base_title} - Part {part_num}",
-                            script=text[:last_speaker_break].strip(),
-                            order=part_num,
-                        )
-                    )
-                    current_words = text[last_speaker_break:].split()
-                else:
-                    # No good break point, just split at limit
-                    parts.append(
-                        LectureScriptPart(
-                            title=f"{base_title} - Part {part_num}",
-                            script=text.strip(),
-                            order=part_num,
-                        )
-                    )
-                    current_words = []
+                current_words = []
                 part_num += 1
 
         # Add remaining words
@@ -275,3 +192,9 @@ Rules:
             )
 
         return parts
+
+
+class LectureBreakdownResponse(BaseModel):
+    """Response schema for lecture breakdown."""
+
+    parts: List[LectureScriptPart]

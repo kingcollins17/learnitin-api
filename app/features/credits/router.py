@@ -122,6 +122,12 @@ async def admin_grant_credits(
             detail="Admin privileges required.",
         )
 
+    if request.amount == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Amount must be non-zero.",
+        )
+
     try:
         if request.amount > 0:
             entry = await credit_service.add_credits(

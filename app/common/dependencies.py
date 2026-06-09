@@ -2,6 +2,7 @@
 
 from app.services.audio_generation_service import AudioGenerationService
 from app.services.audio_conversion_service import AudioConversionService
+from app.services.deepgram_audio_service import DeepgramAudioService
 from app.services.storage_service import FirebaseStorageService
 from app.services.email_service import EmailService
 from app.services.image_generation_service import ImageGenerationService
@@ -13,6 +14,7 @@ from app.services.langchain_service import LangChainService
 from fastapi import Depends, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.database.session import get_async_session
+from functools import lru_cache
 
 # --- Auth & Users ---
 from app.features.users.repository import UserRepository
@@ -36,7 +38,6 @@ from app.features.lessons.generation_service import LessonGenerationService
 from app.features.quiz.generation_service import QuizGenerationService
 from app.features.lessons.lecture_service import (
     LectureConversionService,
-    LectureBreakdownService,
 )
 
 # --- Courses ---
@@ -198,7 +199,6 @@ def get_question_repository(
 # Singleton instances
 _settings = settings
 _langchain_service = LangChainService(settings=_settings, backend="gemini")
-_lecture_breakdown_service = LectureBreakdownService(_langchain_service)
 
 
 def get_settings() -> Settings:
@@ -227,16 +227,11 @@ def get_quiz_generation_service(
     return QuizGenerationService(ai_service)
 
 
-def get_lecture_breakdown_service() -> LectureBreakdownService:
-    return _lecture_breakdown_service
-
-
 # MARK: Lecture Conversion
 def get_lecture_conversion_service(
     ai_service: LangChainService = Depends(get_langchain_service),
-    breakdown_service: LectureBreakdownService = Depends(get_lecture_breakdown_service),
 ) -> LectureConversionService:
-    return LectureConversionService(ai_service, breakdown_service)
+    return LectureConversionService(ai_service)
 
 
 def get_google_play_service() -> GooglePlayService:
@@ -257,6 +252,11 @@ _firebase_fcm_service = FirebaseFCMService(_settings)
 
 def get_audio_generation_service() -> AudioGenerationService:
     return _audio_generation_service
+
+
+@lru_cache()
+def get_deepgram_audio_service() -> DeepgramAudioService:
+    return DeepgramAudioService(settings)
 
 
 def get_audio_conversion_service() -> AudioConversionService:
@@ -392,6 +392,7 @@ def get_lesson_service(
     lecture_service: LectureConversionService = Depends(get_lecture_conversion_service),
     storage_service: FirebaseStorageService = Depends(get_firebase_storage_service),
     audio_gen_service: AudioGenerationService = Depends(get_audio_generation_service),
+    deepgram_audio_service: DeepgramAudioService = Depends(get_deepgram_audio_service),
     audio_conversion_service: AudioConversionService = Depends(
         get_audio_conversion_service
     ),
@@ -405,8 +406,10 @@ def get_lesson_service(
         generation_service=generation_service,
         lecture_service=lecture_service,
         audio_gen_service=audio_gen_service,
+        deepgram_audio_service=deepgram_audio_service,
         storage_service=storage_service,
         audio_conversion_service=audio_conversion_service,
+        settings=settings,
     )
 
 
