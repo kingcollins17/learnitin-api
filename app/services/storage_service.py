@@ -37,7 +37,7 @@ class FirebaseStorageService:
                             self.settings.FIREBASE_CREDENTIALS_JSON
                         )
                     else:
-                        cred_info = json.loads(self.settings.FIREBASE_CREDENTIALS_JSON)
+                        cred_info = json.loads(self.settings.FIREBASE_CREDENTIALS_JSON.replace('\n', '\\n'))
                         cred = credentials.Certificate(cred_info)
 
                     firebase_admin.initialize_app(cred, options)

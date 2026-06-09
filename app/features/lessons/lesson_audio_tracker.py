@@ -37,6 +37,14 @@ class LessonAudioBackgroundGenerationTracker:
         """
         return lesson_id in self._in_progress
 
+    def get_tracked_lessons(self) -> Dict[int, int]:
+        """
+        Get all lessons currently being tracked.
+        """
+        return self._in_progress.copy()
+
 
 # Global singleton instance
 audio_tracker = LessonAudioBackgroundGenerationTracker()
+
+

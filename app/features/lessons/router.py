@@ -1,5 +1,6 @@
 """Lesson API endpoints."""
 
+from app.common.deps import get_active_admin
 from fastapi import (
     APIRouter,
     Depends,
@@ -49,6 +50,7 @@ from app.features.lessons.schemas import (
     LessonAudioResponse,
     StartLessonResponse,
     CompleteLessonResponse,
+    TrackedLessonsResponse,
 )
 from app.features.lessons.service import LessonService, UserLessonService
 from app.features.credits.service import CreditService
@@ -127,6 +129,40 @@ async def get_lessons(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch lessons: {str(e)}",
         )
+
+
+@router.get("/tracked", response_model=ApiResponse[TrackedLessonsResponse])
+async def get_tracked_lessons(
+    _admin: User = Depends(get_active_admin),
+    service: LessonService = Depends(get_lesson_service),
+):
+    """
+    Get all lessons currently undergoing audio or content generation.
+
+    **Authentication required.**
+    """
+    try:
+        audio_ids = list(audio_tracker.get_tracked_lessons().keys())
+        content_ids = list(content_tracker.get_tracked_lessons().keys())
+
+        audio_lessons = await service.get_lessons_by_ids(audio_ids)
+        content_lessons = await service.get_lessons_by_ids(content_ids)
+
+        response_data = TrackedLessonsResponse(
+            audio_generation=[LessonResponse.model_validate(l) for l in audio_lessons],
+            content_generation=[LessonResponse.model_validate(l) for l in content_lessons],
+        )
+        return success_response(
+            data=response_data,
+            details="Retrieved tracked lessons successfully",
+        )
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch tracked lessons: {str(e)}",
+        )
+
 
 
 @router.get("/{lesson_id}", response_model=ApiResponse[LessonDetailResponse])
@@ -525,7 +561,7 @@ async def unlock_audio(
     Generates audio if missing and marks as unlocked.
     """
     try:
-        assert current_user.id
+        assert current_user.id is not None, 'User ID cannot be None'
 
         # 1. Get the lesson
         lesson = await lesson_service.get_lesson_by_id(lesson_id)
@@ -534,6 +570,12 @@ async def unlock_audio(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Lesson not found",
             )
+
+        existing_user_lesson = await user_lesson_service.get_by_user_and_lesson(
+            user_id=current_user.id,
+            lesson_id=lesson_id,
+        )
+        was_locked = not existing_user_lesson or not existing_user_lesson.is_audio_unlocked
 
         # 2. Unlock audio for user (usage increment is now inside this service call)
         user_lesson = await user_lesson_service.unlock_audio(
@@ -562,6 +604,8 @@ async def unlock_audio(
                     credit_service=credit_service,
                     user_id=current_user.id,
                     provider=provider,
+                    user_lesson_service=user_lesson_service,
+                    refund_on_error=was_locked,
                 )
                 message = "Audio is being prepared. Please check back shortly."
             else:

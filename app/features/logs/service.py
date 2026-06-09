@@ -15,10 +15,21 @@ class LogService:
 
     async def create_log(self, log_data: LogCreate) -> Log:
         """Create a new log entry."""
+        message = log_data.message
+        data = log_data.data
+        
+        if message and len(message) >= 255:
+            if data is None:
+                data = {}
+            else:
+                data = dict(data)
+            data["full_message"] = message
+            message = message[:255]
+
         log = Log(
             level=log_data.level,
-            message=log_data.message,
-            data=log_data.data,
+            message=message,
+            data=data,
         )
         return await self.repository.create(log)
 

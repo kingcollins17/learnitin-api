@@ -1,7 +1,7 @@
 """Lesson request/response schemas."""
-
+import json
 from pydantic import BaseModel, Field, field_validator
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime
 from app.features.courses.models import ProgressStatus
 
@@ -203,3 +203,18 @@ class CompleteLessonResponse(BaseModel):
     user_lesson: UserLessonResponse
     has_completed_module: bool
     has_completed_course: bool
+
+
+class TrackedLessonsResponse(BaseModel):
+    """Schema for tracked lessons currently undergoing background generation."""
+
+    audio_generation: List[LessonResponse] = Field(
+        default_factory=list,
+        description="List of lessons with audio generation in progress",
+    )
+    content_generation: List[LessonResponse] = Field(
+        default_factory=list,
+        description="List of lessons with content generation in progress",
+    )
+
+

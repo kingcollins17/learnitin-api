@@ -208,7 +208,7 @@ class LessonService(Commitable):
                     raise
 
     async def generate_audio_from_content(
-        self, lesson_id: int, provider: Optional[str] = None
+        self, lesson_id: int, provider: Optional[str] = None,
     ) -> List[LessonAudio]:
         """
         Generate audio from lesson content in multiple parts.
@@ -232,11 +232,14 @@ class LessonService(Commitable):
 
         # Generate lecture script parts
         try:
+            print(f'Audio provider - {provider}')
             lecture_parts = await self.lecture_service.generate_lecture_parts(
                 lesson.content,
                 max_parts=4,
                 provider=provider,
             )
+            for idx, part in enumerate(lecture_parts):
+                print(f"Part {idx + 1} '{part.title}' length: {len(part.script)} characters")
         except Exception as e:
             await event_bus.dispatch(
                 LogEvent(
@@ -350,6 +353,19 @@ class LessonService(Commitable):
             Lesson if found, None otherwise
         """
         return await self.repository.get_by_id(lesson_id)
+
+    async def get_lessons_by_ids(self, lesson_ids: List[int]) -> List[Lesson]:
+        """
+        Get lessons by a list of IDs.
+
+        Args:
+            lesson_ids: List of lesson IDs
+
+        Returns:
+            List of Lesson objects
+        """
+        return await self.repository.get_by_ids(lesson_ids)
+
 
     async def get_audios_by_lesson_id(self, lesson_id: int) -> List[LessonAudio]:
         """Get all audios for a lesson."""
@@ -675,21 +691,68 @@ class UserLessonService(Commitable):
         Args:
             user_id: ID of the user
             lesson_id: ID of the lesson
-            usage_service: Optional service to increment usage
-            subscription: Optional subscription to track usage for
 
         Returns:
             Updated UserLesson object
         """
-        user_lesson = await self.update_user_lesson(
-            user_id=user_id,
-            lesson_id=lesson_id,
-            update_data={"is_audio_unlocked": True},
-        )
+        user_lesson = await self.get_user_lesson(user_id=user_id, lesson_id=lesson_id)
+        if not user_lesson:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User lesson not found",
+            )
 
+        if not user_lesson.is_audio_unlocked:
+            lesson = await self.lesson_repo.get_by_id(lesson_id)
+            if not lesson:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Lesson not found",
+                )
 
+            if lesson.audio_credit_cost > 0:
+                await self.credit_service.spend_credits(
+                    user_id=user_id,
+                    amount=lesson.audio_credit_cost,
+                    transaction_type=CreditTransactionType.AUDIO_GENERATION,
+                    description=f"Generated audio for lesson: {lesson.title}",
+                    reference_id=str(lesson_id),
+                    reference_type="lesson",
+                )
+
+            user_lesson.is_audio_unlocked = True
+            user_lesson.updated_at = datetime.now(timezone.utc)
+            await self.user_lesson_repo.update(user_lesson)
 
         return user_lesson
+
+    async def revert_audio_lock_on_error(
+        self,
+        user_id: int,
+        lesson_id: int,
+    ) -> None:
+        """
+        Revert audio unlock on error (lock audio and refund credits).
+        """
+        user_lesson = await self.user_lesson_repo.get_by_user_and_lesson(user_id, lesson_id)
+        if not user_lesson:
+            return
+
+        if user_lesson.is_audio_unlocked:
+            user_lesson.is_audio_unlocked = False
+            user_lesson.updated_at = datetime.now(timezone.utc)
+            await self.user_lesson_repo.update(user_lesson)
+
+            lesson = await self.lesson_repo.get_by_id(lesson_id)
+            if lesson and lesson.audio_credit_cost > 0:
+                await self.credit_service.add_credits(
+                    user_id=user_id,
+                    amount=lesson.audio_credit_cost,
+                    transaction_type=CreditTransactionType.REFUND,
+                    description=f"Refund: Audio generation failed for lesson: {lesson.title}",
+                    reference_id=str(lesson_id),
+                    reference_type="lesson",
+                )
 
     async def unlock_quiz(
         self,
