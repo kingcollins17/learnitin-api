@@ -24,7 +24,7 @@ class DeepgramAudioService:
             print("Warning: DEEPGRAM_API_KEY not set")
 
     async def generate_audio(
-        self, text: str, model: Union[DeepgramVoice, str] = DeepgramVoice.THALIA
+        self, text: str, model: Union[DeepgramVoice, str] = DeepgramVoice.ODYSSEUS
     ) -> bytes:
         """
         Generates audio (MP3) from the given text asynchronously.

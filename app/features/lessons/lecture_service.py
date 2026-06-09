@@ -16,20 +16,22 @@ class LectureScriptPart(BaseModel):
 class LectureConversionService:
     """Service for converting lesson content into a lecture script."""
 
-    # Maximum words per part to stay within TTS limits
-    MAX_WORDS_PER_PART = 450
+    # Maximum words per part to stay within TTS limits (Google)
+    MAX_WORDS_PER_PART = 350
+    # Maximum characters per part to stay within TTS limits (Deepgram)
+    MAX_CHARS_PER_PART = 1800
 
     def __init__(self, ai_service: LangChainService):
         self.ai_service = ai_service
 
     async def generate_lecture_parts(
-        self, lesson_content: str, max_parts: int = 10, provider: str = "google"
+        self, lesson_content: str, max_parts: int = 4, provider: str = "google"
     ) -> List[LectureScriptPart]:
         """
         Convert lesson content directly into structured lecture script parts ready for audio generation.
 
         This single-step operation converts the lesson content into a list of parts within
-        TTS word limits, avoiding multiple LLM calls.
+        TTS limits, avoiding multiple LLM calls.
 
         Args:
             lesson_content: The markdown content of the lesson.
@@ -39,12 +41,15 @@ class LectureConversionService:
         Returns:
             A list of LectureScriptPart objects.
         """
-        if provider.lower() == "deepgram":
+        is_deepgram = provider.lower() == "deepgram"
+        limit_desc = f"maximum {self.MAX_CHARS_PER_PART} characters" if is_deepgram else f"maximum {self.MAX_WORDS_PER_PART} words"
+
+        if is_deepgram:
             system_prompt = """You are an expert educational scriptwriter.
 Your task is to take written lesson content and convert it directly into an engaging, natural-sounding audio monologue lecture script broken down into multiple self-contained parts (maximum {max_parts} parts).
 
 Each part:
-1. Is a complete, self-contained segment of ~350-450 words maximum (to stay within text-to-speech limits).
+1. Is a complete, self-contained segment of maximum {max_chars_per_part} characters (to stay within text-to-speech limits).
 2. Ends at a natural break point (end of a topic, transitional moment).
 3. Must be a single-speaker narrator script. Do NOT use speaker labels (e.g., Speaker 1:, Speaker 2:) or dialogue formatting. Just write a continuous, engaging monologue.
 4. Has a descriptive title summarizing that part's content.
@@ -62,7 +67,7 @@ Rules:
 Your task is to take written lesson content and convert it directly into an engaging, natural-sounding audio lecture script broken down into multiple self-contained dialogue parts (maximum {max_parts} parts).
 
 Each part:
-1. Is a complete, self-contained segment of ~350-450 words maximum (to stay within text-to-speech limits).
+1. Is a complete, self-contained segment of maximum {max_words_per_part} words (to stay within text-to-speech limits).
 2. Ends at a natural break point (end of a topic, transitional moment).
 3. Must be strictly formatted with alternating speakers:
    Speaker 1 (Female) is the main instructor: Knowledgeable, warm, clearer, and leads the lesson.
@@ -82,10 +87,10 @@ Rules:
 6. **CRITICAL: Do NOT generate more than {max_parts} parts.** If the source content is extremely long, prioritize the most essential concepts to fit within the limit.
 """
 
-        user_prompt = """Convert the following lesson content directly into a structured list of lecture parts (maximum {max_parts} parts) of ~350-450 words each.
+        user_prompt = f"""Convert the following lesson content directly into a structured list of lecture parts (maximum {{max_parts}} parts) of {limit_desc} each.
 
         Lesson Content:
-        {lesson_content}
+        {{lesson_content}}
 
         Return a structured list of parts with title, script content, and order number.
         """
@@ -98,6 +103,8 @@ Rules:
                 response_schema=LectureBreakdownResponse,
                 lesson_content=lesson_content,
                 max_parts=max_parts,
+                max_words_per_part=self.MAX_WORDS_PER_PART,
+                max_chars_per_part=self.MAX_CHARS_PER_PART,
             ),
         )
 
@@ -109,14 +116,18 @@ Rules:
     def _validate_parts(
         self, parts: List[LectureScriptPart], provider: str = "google"
     ) -> List[LectureScriptPart]:
-        """Validate that all parts are within word limits, splitting if necessary."""
+        """Validate that all parts are within limits, splitting if necessary."""
         validated = []
         order = 1
+        is_deepgram = provider.lower() == "deepgram"
 
         for part in parts:
-            word_count = len(part.script.split())
+            if is_deepgram:
+                is_valid = len(part.script) <= self.MAX_CHARS_PER_PART
+            else:
+                is_valid = len(part.script.split()) <= self.MAX_WORDS_PER_PART
 
-            if word_count <= self.MAX_WORDS_PER_PART:
+            if is_valid:
                 validated.append(
                     LectureScriptPart(
                         title=part.title,
@@ -126,7 +137,7 @@ Rules:
                 )
                 order += 1
             else:
-                # Part is still too long, do a simple split
+                # Part is still too long, do a split
                 sub_parts = self._simple_split(part.script, part.title, provider=provider)
                 for sub_part in sub_parts:
                     validated.append(
@@ -141,24 +152,60 @@ Rules:
         return validated
 
     def _simple_split(self, script: str, base_title: str, provider: str = "google") -> List[LectureScriptPart]:
-        """Perform a simple word-based split as a fallback."""
-        words = script.split()
+        """Perform a simple split based on provider limits."""
         parts = []
-        current_words = []
         part_num = 1
+        is_deepgram = provider.lower() == "deepgram"
 
-        for word in words:
-            current_words.append(word)
-            if len(current_words) >= self.MAX_WORDS_PER_PART:
-                # Try to find a natural break point (end of speaker line)
-                text = " ".join(current_words)
-                if provider.lower() != "deepgram":
+        if is_deepgram:
+            text = script
+            while len(text) > 0:
+                if len(text) <= self.MAX_CHARS_PER_PART:
+                    parts.append(
+                        LectureScriptPart(
+                            title=f"{base_title} - Part {part_num}",
+                            script=text.strip(),
+                            order=part_num,
+                        )
+                    )
+                    break
+                
+                chunk = text[:self.MAX_CHARS_PER_PART]
+                split_point = -1
+                for punc in [". ", "? ", "! ", "\n"]:
+                    last_punc = chunk.rfind(punc)
+                    if last_punc > (self.MAX_CHARS_PER_PART // 2):
+                        split_point = max(split_point, last_punc + 1)
+                
+                if split_point == -1:
+                    last_space = chunk.rfind(" ")
+                    if last_space > 0:
+                        split_point = last_space
+                    else:
+                        split_point = self.MAX_CHARS_PER_PART
+                
+                parts.append(
+                    LectureScriptPart(
+                        title=f"{base_title} - Part {part_num}",
+                        script=text[:split_point].strip(),
+                        order=part_num,
+                    )
+                )
+                text = text[split_point:].strip()
+                part_num += 1
+        else:
+            words = script.split()
+            current_words = []
+
+            for word in words:
+                current_words.append(word)
+                if len(current_words) >= self.MAX_WORDS_PER_PART:
+                    text = " ".join(current_words)
                     last_speaker_break = max(
                         text.rfind("\nSpeaker 1:"),
                         text.rfind("\nSpeaker 2:"),
                     )
                     if last_speaker_break > len(text) // 2:
-                        # Found a good break point
                         parts.append(
                             LectureScriptPart(
                                 title=f"{base_title} - Part {part_num}",
@@ -170,26 +217,24 @@ Rules:
                         part_num += 1
                         continue
 
-                # No good break point or deepgram, just split at limit
+                    parts.append(
+                        LectureScriptPart(
+                            title=f"{base_title} - Part {part_num}",
+                            script=text.strip(),
+                            order=part_num,
+                        )
+                    )
+                    current_words = []
+                    part_num += 1
+
+            if current_words:
                 parts.append(
                     LectureScriptPart(
                         title=f"{base_title} - Part {part_num}",
-                        script=text.strip(),
+                        script=" ".join(current_words).strip(),
                         order=part_num,
                     )
                 )
-                current_words = []
-                part_num += 1
-
-        # Add remaining words
-        if current_words:
-            parts.append(
-                LectureScriptPart(
-                    title=f"{base_title} - Part {part_num}",
-                    script=" ".join(current_words).strip(),
-                    order=part_num,
-                )
-            )
 
         return parts
 

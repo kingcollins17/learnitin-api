@@ -1,7 +1,7 @@
 import traceback
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.features.lessons.service import LessonService
+from app.features.lessons.service import LessonService, UserLessonService
 from app.features.lessons.repository import LessonAudioRepository
 from datetime import datetime, timezone
 from app.common.events import (
@@ -33,6 +33,8 @@ async def generate_audio_background(
     credit_service: CreditService,
     user_id: Optional[int] = None,
     provider: Optional[str] = None,
+    user_lesson_service: Optional[UserLessonService] = None,
+    refund_on_error: bool = False,
 ):
     """
     Background task to generate audio for a lesson.
@@ -89,29 +91,17 @@ async def generate_audio_background(
             f"Audio generation completed for lesson {lesson_id}: {len(created_audios)} parts created"
         )
 
-        if created_audios and user_id and lesson.audio_credit_cost > 0:
-
-            await credit_service.spend_credits(
-                user_id=user_id,
-                amount=lesson.audio_credit_cost,
-                transaction_type=CreditTransactionType.AUDIO_GENERATION,
-                description=f"Generated audio for lesson: {lesson.title}",
-                reference_id=str(lesson_id),
-                reference_type="lesson",
-            )
-            await credit_service.commit_all()
-
         # Publish completion events
         if user_id:
-            # 1. Dispatch AudioReadyEvent
-            await event_bus.dispatch(
-                AudioReadyEvent(
-                    user_id=user_id,
-                    lesson_id=lesson_id,
-                    title=lesson.title,
-                    count=len(created_audios),
-                )
-            )
+            # 1. Dispatch AudioReadyEvent, no handler listening, comment out for now
+            # await event_bus.dispatch(
+            #     AudioReadyEvent(
+            #         user_id=user_id,
+            #         lesson_id=lesson_id,
+            #         title=lesson.title,
+            #         count=len(created_audios),
+            #     )
+            # )
             # 2. Dispatch transient notification (WS only, not in DB)
             await event_bus.dispatch(
                 NotificationInAppPushEvent(
@@ -132,13 +122,14 @@ async def generate_audio_background(
 
         # Publish failure event
         if user_id:
-            await event_bus.dispatch(
-                AudioGenerationFailedEvent(
-                    user_id=user_id,
-                    lesson_id=lesson_id,
-                    error=str(e),
-                )
-            )
+            if user_lesson_service and refund_on_error:
+                try:
+                    await user_lesson_service.revert_audio_lock_on_error(user_id, lesson_id)
+                    await user_lesson_service.commit_all()
+                except Exception as rev_err:
+                    print(f"Failed to revert audio lock: {rev_err}")
+
+            
         
         # Dispatch error log event
         await event_bus.dispatch(

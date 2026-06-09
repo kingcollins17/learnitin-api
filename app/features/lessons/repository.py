@@ -4,9 +4,10 @@ from typing import Optional, List
 import json
 from sqlalchemy import desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import select, col
 from sqlalchemy.orm import selectinload
 from app.features.lessons.models import Lesson, UserLesson, LessonAudio
+
 
 
 class LessonRepository:
@@ -26,9 +27,22 @@ class LessonRepository:
         result = await self.session.execute(
             select(Lesson)
             .where(Lesson.id == lesson_id)
-            .options(selectinload(Lesson.audios))  # ty:ignore[invalid-argument-type]
+            .options(selectinload(Lesson.audios))  # type: ignore
         )
         return result.scalar_one_or_none()
+
+    async def get_by_ids(self, lesson_ids: List[int]) -> List[Lesson]:
+        """Get lessons by a list of IDs."""
+        if not lesson_ids:
+            return []
+        result = await self.session.execute(
+            select(Lesson)
+            .where(col(Lesson.id).in_(lesson_ids))
+            .options(selectinload(Lesson.audios))  # type: ignore
+        )
+        return list(result.scalars().all())
+
+
 
     async def get_by_module_id(
         self, module_id: int, skip: int = 0, limit: int = 100
