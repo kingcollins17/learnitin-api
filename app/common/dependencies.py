@@ -1,5 +1,6 @@
 """Shared dependencies for services and repositories."""
 
+from typing import Optional
 from app.services.audio_generation_service import AudioGenerationService
 from app.services.audio_conversion_service import AudioConversionService
 from app.services.deepgram_audio_service import DeepgramAudioService
@@ -79,8 +80,6 @@ from app.features.app_configs.repository import AppConfigRepository
 from app.features.app_configs.service import AppConfigService
 from app.features.streaks.repository import StreakRepository
 from app.features.streaks.service import StreakService
-
-
 
 # ========== Repositories ==========
 
@@ -198,7 +197,7 @@ def get_question_repository(
 
 # Singleton instances
 _settings = settings
-_langchain_service = LangChainService(settings=_settings, backend="gemini")
+_langchain_service: Optional[LangChainService] = None
 
 
 def get_settings() -> Settings:
@@ -206,6 +205,9 @@ def get_settings() -> Settings:
 
 
 def get_langchain_service() -> LangChainService:
+    global _langchain_service
+    if _langchain_service is None:
+        _langchain_service = LangChainService(settings=_settings, backend=_settings.DEFAULT_AI_PROVIDER)
     return _langchain_service
 
 
@@ -213,6 +215,7 @@ def get_course_generation_service(
     ai_service: LangChainService = Depends(get_langchain_service),
 ) -> CourseGenerationService:
     return CourseGenerationService(ai_service)
+
 
 
 def get_lesson_generation_service(
@@ -496,7 +499,9 @@ def get_admin_service(
     user_repo: UserRepository = Depends(get_user_repository),
     user_service: UserService = Depends(get_user_service),
     subscription_service: SubscriptionService = Depends(get_subscription_service),
-    subscription_usage_service: SubscriptionUsageService = Depends(get_subscription_usage_service),
+    subscription_usage_service: SubscriptionUsageService = Depends(
+        get_subscription_usage_service
+    ),
     notification_service: NotificationService = Depends(get_notification_service),
     course_repo: CourseRepository = Depends(get_course_repository),
     lesson_repo: LessonRepository = Depends(get_lesson_repository),
@@ -546,4 +551,3 @@ def get_streak_service(
     credit_service: CreditService = Depends(get_credit_service),
 ) -> StreakService:
     return StreakService(repo, user_course_repo, course_repo, credit_service)
-
