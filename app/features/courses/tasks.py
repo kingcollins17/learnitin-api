@@ -1,3 +1,4 @@
+
 import traceback
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.events import LogEvent, LogLevel, event_bus
@@ -11,6 +12,7 @@ from app.features.courses.repository import (
 from app.features.modules.repository import ModuleRepository
 from app.features.lessons.repository import LessonRepository
 from app.features.reviews.repository import ReviewRepository
+from app.common.config import settings
 from app.common.dependencies import get_firebase_storage_service, get_image_generation_service
 from app.features.courses.service import CourseService
 
@@ -33,10 +35,14 @@ def _get_course_service(session: AsyncSession) -> CourseService:
 async def generate_course_image_background(
     course_id: int
 ):
+
+  
     """
     Background task to generate an image for a course.
     """
     try:
+        # If storage is not available yet, exit
+        if not settings.STORAGE_AVAILABLE: return
         async with AsyncSessionLocal() as session:
             course_service = _get_course_service(session)
 
