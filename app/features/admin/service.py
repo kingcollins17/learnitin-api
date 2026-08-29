@@ -178,19 +178,6 @@ class AdminService(Commitable):
         # Map to UserResponse Pydantic model
         user_response = UserResponse.model_validate(user)
 
-        # Fetch active subscription
-        subscription = await self.subscription_service.get_active_subscription(user_id)
-        if subscription and subscription.id:
-            # Attach subscription
-            sub_resp = SubscriptionResponse.model_validate(subscription)
-
-            # Fetch usage for this subscription
-            usage = await self.subscription_usage_service.get_usage(subscription.id)
-            if usage:
-                sub_resp.usage = SubscriptionUsageResponse.model_validate(usage)
-
-            user_response.subscription = sub_resp
-
         return user_response
 
     async def ban_user(self, user_id: int, reason: Optional[str] = None) -> User:
@@ -269,100 +256,6 @@ class AdminService(Commitable):
         logger.info(f"Admin unbanned user {user_id}")
         return updated_user
 
-    # ========== Subscription Management ==========
-
-    async def grant_premium(
-        self,
-        user_id: int,
-        duration_days: int = 30,
-        product_id: str = "premium_monthly",
-    ) -> Subscription:
-        """Grant a user premium subscription without Google Play.
-
-        Deactivates existing subscriptions and creates a new ACTIVE subscription
-        with the specified duration. Uses the same product_id as Google Play
-        purchases so the subscription is indistinguishable from a purchased one.
-
-        Args:
-            user_id: Target user.
-            duration_days: Subscription duration in days.
-            product_id: Google Play product ID (e.g. 'premium_monthly').
-
-        Returns:
-            The newly created Subscription.
-        """
-        # Verify user exists
-        await self._get_user_entity(user_id)
-
-        # Deactivate existing subscriptions
-        await self.subscription_service.subscription_repository.deactivate_all_for_user(
-            user_id
-        )
-
-        expiry = (datetime.now(timezone.utc) + timedelta(days=duration_days)).replace(
-            tzinfo=None
-        )
-
-        sub = Subscription(
-            user_id=user_id,
-            product_id=product_id,
-            purchase_token=None,
-            status=SubscriptionStatus.ACTIVE,
-            expiry_time=expiry,
-            auto_renew=False,
-        )
-
-        sub = await self.subscription_service._finalize_and_notify(
-            sub,
-            title="Premium Granted!",
-            message=f"You've been granted {duration_days} days of premium access by an administrator!",
-            is_new=True,
-            dispatch_notification=False,  # We'll do it via notification_service for persistence
-        )
-
-        # Notify via notification service (DB + Push)
-        await self.notification_service.create_notification(
-            NotificationCreate(
-                user_id=user_id,
-                title="Premium Activated",
-                message=f"You've been granted {duration_days} days of premium access. Enjoy your learning journey!",
-                type=NotificationType.SYSTEM,
-                data={"product_id": sub.product_id, "subscription_id": sub.id},
-            )
-        )
-
-        logger.info(
-            f"Admin granted premium to user {user_id} for {duration_days} days"
-        )
-        return sub
-
-    async def revoke_premium(self, user_id: int) -> Subscription:
-        """Revoke premium and revert user to free plan.
-
-        Args:
-            user_id: Target user.
-
-        Returns:
-            The new free-plan Subscription.
-        """
-        await self._get_user_entity(user_id)
-
-        sub = await self.subscription_service.create_free_subscription(
-            user_id, dispatch_notification=False
-        )
-
-        # Notify via notification service
-        await self.notification_service.create_notification(
-            NotificationCreate(
-                user_id=user_id,
-                title="Subscription Updated",
-                message="Your premium access has been revoked. You are now on the Free plan.",
-                type=NotificationType.SYSTEM,
-            )
-        )
-
-        logger.info(f"Admin revoked premium for user {user_id}")
-        return sub
 
     # ========== Course Management ==========
 
