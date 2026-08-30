@@ -37,9 +37,7 @@ from app.common.dependencies import (
     get_subscription_usage_service,
     get_credit_service,
 )
-from .dependencies import (
-    get_user_subscription,
-)
+
 from .schemas import (
     PubSubPayload,
     SubscriptionNotificationType,
@@ -196,7 +194,7 @@ async def _process_one_time_product_notification(
 
 @router.get("/me", response_model=ApiResponse[SubscriptionResponse])
 async def get_my_subscription(
-    subscription: Subscription = Depends(get_user_subscription),
+    # subscription: Subscription = Depends(get_user_subscription),
     # usage_service: SubscriptionUsageService = Depends(get_subscription_usage_service),
 ):
     """
@@ -205,13 +203,13 @@ async def get_my_subscription(
     Automatically handles free plan creation/renewal if needed.
     """
     # Attach usage to subscription object for schema
-    assert subscription.id is not None
+    # assert subscription.id is not None
     # usage = await usage_service.get_usage(subscription.id)
-    subscription_resp = SubscriptionResponse.model_validate(subscription)
+    # subscription_resp = SubscriptionResponse.model_validate(subscription)
     # subscription_resp.usage = usage
 
     return success_response(
-        data=subscription_resp, details="Subscription retrieved successfully"
+        data={}, details="Subscription retrieved successfully"
     )
 
 

@@ -21,30 +21,11 @@ from app.common.dependencies import (
 )
 
 
-async def get_user_subscription(
-    current_user: User = Depends(get_current_user),
-    service: SubscriptionService = Depends(get_subscription_service),
-) -> Subscription:
-    """
-    Get user's subscription with automatic renewal/demotion logic.
-
-    Flow:
-    1. Try to get active subscription
-    2. If no active subscription, find any subscription (most recent first)
-    3. If premium and expired beyond grace period → demote to free
-    4. If free and expired → create new free subscription
-    5. If no subscription at all → create free subscription
-
-    Returns:
-        The user's current valid subscription.
-    """
-    raise HTTPException(status_code=401, detail="Unimplemented Error, feature deprecated")
-
 
 
 async def get_premium_user(
     current_user: User = Depends(get_current_user),
-    subscription: Subscription = Depends(get_user_subscription),
+    # subscription: Subscription = Depends(get_user_subscription),
     service: SubscriptionService = Depends(get_subscription_service),
 ) -> User:
     """
@@ -72,7 +53,7 @@ class ResourceAccessControl:
 
     async def __call__(
         self,
-        subscription: Subscription = Depends(get_user_subscription),
+        # subscription: Subscription = Depends(get_user_subscription),
         service: SubscriptionService = Depends(get_subscription_service),
         usage_service: SubscriptionUsageService = Depends(
             get_subscription_usage_service
