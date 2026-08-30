@@ -290,7 +290,7 @@ async def publish_course(
         await service.commit_all()
 
         # Generate image in background if it's missing
-        if not updated_course.image_url:
+        if not updated_course.image_url and settings.STORAGE_AVAILABLE:
             background_tasks.add_task(
                 generate_course_image_background, course_id
             )
@@ -995,7 +995,7 @@ async def get_course_detail(
                 )
 
         # Generate image in background if it's missing
-        if not course.image_url:
+        if not course.image_url and settings.STORAGE_AVAILABLE:
             background_tasks.add_task(
                 generate_course_image_background, course_id, 
             )

@@ -1,5 +1,6 @@
 """Course business logic and service layer."""
 
+from app.common.config import settings
 from app.services.storage_service import FirebaseStorageService
 
 from fastapi import HTTPException, status
@@ -136,7 +137,7 @@ class CourseService(Commitable):
         course = await self.repository.create(course)
 
         # Generate Course Image
-        if course.id:
+        if course.id and settings.STORAGE_AVAILABLE:
             await self.generate_course_image(course.id)
 
         # 2. Create Modules and Lessons
@@ -189,6 +190,8 @@ class CourseService(Commitable):
             The generated image URL or None if failed
         """
         try:
+            # Exit if storage is not available
+            if not settings.STORAGE_AVAILABLE: return
             # Fetch course from database
             course = await self.repository.get_by_id(course_id, use_cache=False)
             if not course:

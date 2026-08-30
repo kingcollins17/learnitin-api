@@ -38,69 +38,8 @@ async def get_user_subscription(
     Returns:
         The user's current valid subscription.
     """
-    if current_user.id is None:
-        raise HTTPException(status_code=401, detail="User ID not found")
+    raise HTTPException(status_code=401, detail="Unimplemented Error, feature deprecated")
 
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-
-    # Step 1: Try to get active subscription
-    subscription = await service.get_active_subscription(current_user.id)
-
-    if subscription:
-        # Have active subscription - check if it needs renewal
-        if service.is_free_plan(subscription) and now > subscription.expiry_time:
-            # Free plan expired - renew it
-
-            subscription = await service.create_free_subscription(current_user.id)
-        elif not service.is_free_plan(subscription):
-            # Premium subscription - check grace period
-            grace_period = timedelta(days=settings.SUBSCRIPTION_GRACE_PERIOD_DAYS)
-            expiry_with_grace = subscription.expiry_time + grace_period
-
-            if now > expiry_with_grace:
-                # Premium expired beyond grace period - demote to free
-
-                subscription = await service.create_free_subscription(
-                    current_user.id, dispatch_notification=True
-                )
-
-        return subscription
-
-    # Step 2: No active subscription - check if user has any historical subscription
-    any_subscription = await service.subscription_repository.get_by_user_id(
-        current_user.id
-    )
-
-    if any_subscription:
-        # User has a subscription but it's not active - handle based on type
-        if service.is_free_plan(any_subscription):
-            # Free plan expired - create new free subscription
-
-            subscription = await service.create_free_subscription(current_user.id)
-        else:
-            # Premium expired - check grace period
-            grace_period = timedelta(days=settings.SUBSCRIPTION_GRACE_PERIOD_DAYS)
-            expiry_with_grace = any_subscription.expiry_time + grace_period
-
-            if now > expiry_with_grace:
-                # Premium expired beyond grace period - demote to free
-
-                subscription = await service.create_free_subscription(
-                    current_user.id, dispatch_notification=True
-                )
-            else:
-                # Still within grace period - return the expired premium
-                # (they still have access during grace period)
-                subscription = any_subscription
-
-        return subscription
-
-    # Step 3: No subscription at all - create free plan
-    subscription = await service.create_free_subscription(
-        current_user.id,
-        dispatch_notification=False,
-    )
-    return subscription
 
 
 async def get_premium_user(

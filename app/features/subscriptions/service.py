@@ -121,56 +121,7 @@ class SubscriptionService(Commitable):
             sub.auto_renew = auto_renew
         return await self.subscription_repository.update(sub)
 
-    # ========== Public API Methods ==========
 
-    FREE_PRODUCT_ID = "free"
-
-    def is_free_plan(self, subscription: Subscription) -> bool:
-        """Check if a subscription is on the free plan."""
-        return subscription.product_id == self.FREE_PRODUCT_ID
-
-    async def get_active_subscription(self, user_id: int) -> Optional[Subscription]:
-        """Get user's current valid subscription."""
-        sub = await self.subscription_repository.get_active_by_user_id(user_id)
-        if sub and sub.expiry_time > datetime.now(timezone.utc).replace(tzinfo=None):
-            return sub
-        return None
-
-    async def create_free_subscription(
-        self, user_id: int, dispatch_notification: bool = False
-    ) -> Subscription:
-        """Deactivate old plans and start a fresh free plan."""
-        await self.subscription_repository.deactivate_all_for_user(user_id)
-        expiry = (datetime.now(timezone.utc) + timedelta(days=30)).replace(tzinfo=None)
-
-        sub = Subscription(
-            user_id=user_id,
-            product_id=self.FREE_PRODUCT_ID,
-            purchase_token=None,
-            status=SubscriptionStatus.ACTIVE,
-            expiry_time=expiry,
-            auto_renew=True,
-        )
-        return await self._finalize_and_notify(
-            sub,
-            title="Free Plan Activated",
-            message="You're now on the Free plan. Ready to start your learning journey?",
-            in_app_event=InAppEventType.INFO,
-            dispatch_notification=dispatch_notification,
-        )
-
-    async def get_or_create_free_subscription(self, user_id: int) -> Subscription:
-        """Ensure the user has at least some active plan."""
-        existing = await self.get_active_subscription(user_id)
-        return existing or await self.create_free_subscription(user_id)
-
-    async def get_free_plan_limits(self) -> FreePlanLimitsResponse:
-        """Get the free plan limits from settings."""
-        return FreePlanLimitsResponse(
-            learning_journeys_limit=settings.FREE_PLAN_LEARNING_JOURNEYS_LIMIT,
-            lessons_limit=settings.FREE_PLAN_LESSONS_LIMIT,
-            audio_lessons_limit=settings.FREE_PLAN_AUDIO_LESSONS_LIMIT,
-        )
 
     async def verify_and_save(
         self, user_id: int, request: SubscriptionVerifyRequest
