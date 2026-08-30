@@ -75,6 +75,8 @@ class Settings(BaseSettings):
     STREAK_7_DAY_BONUS: int = Field(default=60)
     COURSE_GENERATION_COST: int = Field(default=10)
 
+    #STORAGE AVAILABLE
+    STORAGE_AVAILABLE: bool = Field(default=False, description="Whether the app storage service is back online")
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = Field(
         default=[
