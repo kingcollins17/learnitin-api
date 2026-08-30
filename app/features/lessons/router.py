@@ -30,7 +30,6 @@ from app.common.responses import ApiResponse, success_response
 from app.features.users.models import User
 from app.features.subscriptions.dependencies import (
     ResourceAccessControl,
-    get_user_subscription,
     get_subscription_service,
     get_subscription_usage_service,
 )
