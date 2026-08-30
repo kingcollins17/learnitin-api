@@ -2,3 +2,18 @@ LIVE_URL=https://learnitin-api-982845074244.us-central1.run.app
 
 
 STAGING_URL=https://learnitin-api.onrender.com
+
+
+curl https://api.deepseek.com/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-2f07352737c443ac988d3d80a00344eb" \
+  -d '{
+        "model": "deepseek-v4-pro",
+        "messages": [
+          {"role": "system", "content": "You are a helpful assistant."},
+          {"role": "user", "content": "Hello!"}
+        ],
+        "thinking": {"type": "enabled"},
+        "reasoning_effort": "high",
+        "stream": false
+      }'

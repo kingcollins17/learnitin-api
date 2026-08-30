@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=43200)
 
     # Database - MySQL Configuration
+    DATABASE_URL: str = Field(default="")
     DB_HOST: str = Field(default="localhost")
     DB_PORT: int = Field(default=3306)
     DB_USER: str = Field(default="root")
@@ -39,11 +40,17 @@ class Settings(BaseSettings):
     # Gemini
     GEMINI_API_KEY: str = Field(default="")
 
+    # Deepseek
+    DEEPSEEK_API_KEY: str = Field(default="")
+
+    # AI Provider
+    DEFAULT_AI_PROVIDER: str = Field(default="deepseek")
+
     # Deepgram
     DEEPGRAM_API_KEY: str = Field(default="")
 
     # Audio Provider
-    DEFAULT_AUDIO_PROVIDER: str = Field(default="google")
+    DEFAULT_AUDIO_PROVIDER: str = Field(default="deepgram")
 
     # Email
     EMAIL_FROM: str = Field(default="noreply@learnitin.online")
@@ -63,20 +70,10 @@ class Settings(BaseSettings):
     # Google Auth
     GOOGLE_CLIENT_ID: str = Field(default="")
 
-    # Free Plan Limits (per month)
-    FREE_PLAN_LEARNING_JOURNEYS_LIMIT: int = Field(default=2)
-    FREE_PLAN_LESSONS_LIMIT: int = Field(default=10)
-    FREE_PLAN_AUDIO_LESSONS_LIMIT: int = Field(default=5)
-
     # Credits
     NEW_USER_WELCOME_CREDITS: int = Field(default=100)
-    PREMIUM_SUBSCRIPTION_CREDITS: int = Field(default=800)
     STREAK_7_DAY_BONUS: int = Field(default=60)
-
     COURSE_GENERATION_COST: int = Field(default=10)
-
-    # Subscription Grace Period (days after expiry before demotion to free)
-    SUBSCRIPTION_GRACE_PERIOD_DAYS: int = Field(default=3)
 
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = Field(
@@ -86,14 +83,6 @@ class Settings(BaseSettings):
             "http://localhost:5173",  # Vite default
         ]
     )
-
-    @property
-    def DATABASE_URL(self) -> str:
-        """
-        Construct async MySQL database URL.
-        Format: mysql+aiomysql://user:password@host:port/database
-        """
-        return f"mysql+aiomysql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     model_config = {
         "case_sensitive": True,

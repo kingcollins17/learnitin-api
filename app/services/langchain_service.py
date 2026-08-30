@@ -27,7 +27,7 @@ class LangChainService:
 
     def __init__(
         self,
-        settings: Settings,
+        settings: Optional[Settings] = None,
         backend: str = "gemini",
         model: Optional[str] = None,
         temperature: float = 0.7,
@@ -36,11 +36,15 @@ class LangChainService:
         Initialize LangChain service with specified backend.
 
         Args:
-            settings: Application settings
-            backend: Backend to use ("gemini" or "openai")
+            settings: Application settings (defaults to global app settings)
+            backend: Backend to use ("gemini", "openai", or "deepseek")
             model: Model name (defaults to backend-specific default)
             temperature: Model temperature (0.0-1.0)
         """
+        if settings is None:
+            from app.common.config import settings as default_settings
+            settings = default_settings
+
         self.settings = settings
         self.backend = backend
         self.temperature = temperature
@@ -70,6 +74,17 @@ class LangChainService:
             return ChatOpenAI(
                 api_key=self.settings.OPENAI_API_KEY,  # ty:ignore[unknown-argument]
                 model=model or "gpt-4",  # ty:ignore[unknown-argument]
+                temperature=temperature,
+            )
+
+        elif backend == "deepseek":
+            if not self.settings.DEEPSEEK_API_KEY:
+                raise ValueError("DEEPSEEK_API_KEY not configured in environment")
+
+            return ChatOpenAI(
+                api_key=self.settings.DEEPSEEK_API_KEY,  # ty:ignore[unknown-argument]
+                base_url="https://api.deepseek.com",  # ty:ignore[unknown-argument]
+                model=model or "deepseek-chat",  # ty:ignore[unknown-argument]
                 temperature=temperature,
             )
 

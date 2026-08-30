@@ -64,11 +64,20 @@ class TestLangChainService:
         with pytest.raises(ValueError, match="Unsupported backend"):
             LangChainService(backend="invalid_backend")
     
-    def test_gemini_without_api_key(self, monkeypatch):
-        """Test that Gemini without API key raises error."""
-        # Temporarily remove the API key
+    def test_deepseek_without_api_key(self, monkeypatch):
+        """Test that DeepSeek without API key raises error."""
         from app.common import config
-        monkeypatch.setattr(config.settings, "GEMINI_API_KEY", "")
-        
-        with pytest.raises(ValueError, match="GEMINI_API_KEY not configured"):
-            LangChainService(backend="gemini")
+        monkeypatch.setattr(config.settings, "DEEPSEEK_API_KEY", "")
+
+        with pytest.raises(ValueError, match="DEEPSEEK_API_KEY not configured"):
+            LangChainService(settings=config.settings, backend="deepseek")
+
+    def test_deepseek_init(self, monkeypatch):
+        """Test that DeepSeek initializes ChatOpenAI with base_url."""
+        from app.common import config
+        monkeypatch.setattr(config.settings, "DEEPSEEK_API_KEY", "sk-fake-key")
+
+        service = LangChainService(settings=config.settings, backend="deepseek")
+        assert service.backend == "deepseek"
+        assert str(service.llm.openai_api_base) == "https://api.deepseek.com"
+
