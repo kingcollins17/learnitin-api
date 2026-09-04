@@ -12,7 +12,7 @@ from app.common.deps import get_current_active_user, get_current_active_user_opt
 from app.common.config import settings
 from app.common.responses import ApiResponse, success_response
 from app.features.users.models import User
-from app.services.storage_service import FirebaseStorageService
+from app.services.storage_service import StorageService
 from app.common.dependencies import (
     get_course_service,
     get_category_service,
@@ -22,7 +22,7 @@ from app.common.dependencies import (
     DBMaintenanceService,
     run_db_maintenance_in_bg,
     get_credit_service,
-    get_firebase_storage_service,
+    get_storage_service,
 )
 from app.features.subscriptions.dependencies import (
     ResourceAccessControl,
@@ -815,12 +815,12 @@ async def upload_category_or_subcategory_image(
     current_user: User = Depends(get_active_admin),
     category_service: CategoryService = Depends(get_category_service),
     subcategory_service: SubCategoryService = Depends(get_subcategory_service),
-    storage_service: FirebaseStorageService = Depends(get_firebase_storage_service),
+    storage_service: StorageService = Depends(get_storage_service),
 ):
     """
     Upload an image for a category or subcategory.
 
-    Uploads the image file to the `/category` subfolder in the Firebase storage bucket.
+    Uploads the image file to the `/Image/category` subfolder in the storage bucket.
 
     If type is 'category', only administrators can upload images.
     """
@@ -840,11 +840,11 @@ async def upload_category_or_subcategory_image(
                 detail="File is empty",
             )
 
-        # Generate destination path in bucket: sub folder /category
+        # Generate destination path in bucket: sub folder Image/category
         import uuid
         file_ext = file.filename.split(".")[-1] if file.filename and "." in file.filename else "png"
         # Force a safe filename
-        destination_path = f"category/{type}_{id}_{uuid.uuid4()}.{file_ext}"
+        destination_path = f"Image/category/{type}_{id}_{uuid.uuid4()}.{file_ext}"
 
         # Upload using storage_service
         image_url = storage_service.upload_bytes(

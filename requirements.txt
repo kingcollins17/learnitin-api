@@ -10,6 +10,7 @@ APScheduler==3.11.2
 argon2-cffi==25.1.0
 argon2-cffi-bindings==25.1.0
 async-lru==2.1.0
+boto3==1.43.88
 attrs==25.4.0
 bcrypt==5.0.0
 bubus==1.5.6

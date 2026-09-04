@@ -1,7 +1,7 @@
 """Course business logic and service layer."""
 
 from app.common.config import settings
-from app.services.storage_service import FirebaseStorageService
+from app.services.storage_service import StorageService
 
 from fastapi import HTTPException, status
 from typing import List, Optional, TypeVar
@@ -59,7 +59,7 @@ class CourseService(Commitable):
         review_repository: ReviewRepository,
         category_repository: CategoryRepository,
         subcategory_repository: SubCategoryRepository,
-        storage_service: FirebaseStorageService,
+        storage_service: StorageService,
         image_gen_service: ImageGenerationService,
     ):
         self.repository = course_repository
@@ -204,8 +204,8 @@ class CourseService(Commitable):
             image_bytes = await self.image_gen_service.generate_image(prompt)
 
             if image_bytes:
-                filename = f"courses/{course.user_id}/{uuid.uuid4()}.png"
-                # Upload to firebase
+                filename = f"Image/courses/{course.user_id}/{uuid.uuid4()}.png"
+                # Upload to storage
                 image_url = self.storage_service.upload_bytes(
                     data=image_bytes,
                     destination_path=filename,
@@ -693,7 +693,7 @@ class CourseService(Commitable):
 class CategoryService(Commitable):
     """Service for category business logic."""
 
-    def __init__(self, category_repository: CategoryRepository, storage_service: FirebaseStorageService):
+    def __init__(self, category_repository: CategoryRepository, storage_service: StorageService):
 
         self.category_repository = category_repository
         self.storage_service = storage_service
@@ -776,7 +776,7 @@ class SubCategoryService(Commitable):
         self,
         subcategory_repository: SubCategoryRepository,
         category_repository: CategoryRepository,
-        storage_service: FirebaseStorageService,
+        storage_service: StorageService,
     ):
 
         self.subcategory_repository = subcategory_repository

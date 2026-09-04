@@ -9,7 +9,8 @@ from typing import TYPE_CHECKING, Optional
 from app.features.modules.models import Module
 from app.features.quiz.models import Quiz
 
-from sqlalchemy import Text, UniqueConstraint, ForeignKey, Integer
+from enum import Enum
+from sqlalchemy import Text, String, UniqueConstraint, ForeignKey, Integer
 from sqlalchemy.dialects.mysql import LONGTEXT
 from app.features.courses.models import ProgressStatus
 
@@ -145,6 +146,67 @@ class UserLesson(SQLModel, table=True):
     is_quiz_unlocked: bool = Field(default=False)
     is_quiz_completed: bool = Field(default=False)
     status: ProgressStatus = Field(default=ProgressStatus.IN_PROGRESS)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: Optional[datetime] = Field(default=None)
+
+    class Config:
+        """Pydantic config."""
+
+        from_attributes = True
+
+
+class GenerationType(str, Enum):
+    """Type of generation task."""
+
+    CONTENT = "content"
+    AUDIO = "audio"
+
+
+class GenerationStatus(str, Enum):
+    """Status of generation process."""
+
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class LessonGenerationState(SQLModel, table=True):
+    """Lesson generation state tracking model for database."""
+
+    __tablename__ = "lesson_generations"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("users.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        ),
+    )
+    lesson_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            Integer,
+            ForeignKey("lessons.id", ondelete="CASCADE"),
+            nullable=True,
+            index=True,
+        ),
+    )
+    generation_type: GenerationType = Field(
+        sa_column=Column(String(50), nullable=False, index=True)
+    )
+    status: GenerationStatus = Field(
+        default=GenerationStatus.IN_PROGRESS,
+        sa_column=Column(String(50), nullable=False, index=True),
+    )
+    provider: Optional[str] = Field(default=None)
+    task_id: Optional[str] = Field(default=None)
+    error_message: Optional[str] = Field(default=None, sa_column=Column(LONGTEXT))
+    metadata_json: Optional[str] = Field(default=None, sa_column=Column(LONGTEXT))
+    started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    completed_at: Optional[datetime] = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default=None)
 

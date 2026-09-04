@@ -30,10 +30,57 @@ def _get_notification_service(
 
 
 from .schemas import NotificationResponse, NotificationUpdate, NotificationCreate
+from .ws_manager import notification_ws_manager
 from app.common.events import event_bus, NotificationInAppPushEvent, InAppEventType
 import random
 
 router = APIRouter()
+
+
+@router.websocket("/ws")
+async def notification_websocket_endpoint(
+    websocket: WebSocket,
+    token: Optional[str] = Query(None),
+):
+    """
+    WebSocket endpoint for real-time user notifications.
+    Authenticates user via JWT token provided in the 'token' query parameter.
+    """
+    if not token:
+        await websocket.close(
+            code=status.WS_1008_POLICY_VIOLATION,
+            reason="Missing authorization token",
+        )
+        return
+
+    payload = decode_access_token(token)
+    if not payload or "sub" not in payload:
+        await websocket.close(
+            code=status.WS_1008_POLICY_VIOLATION,
+            reason="Invalid authorization token",
+        )
+        return
+
+    try:
+        user_id = int(payload["sub"])
+    except (ValueError, TypeError):
+        await websocket.close(
+            code=status.WS_1008_POLICY_VIOLATION,
+            reason="Invalid user identity in token",
+        )
+        return
+
+    await notification_ws_manager.connect(user_id, websocket)
+
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_json({"type": "pong"})
+    except WebSocketDisconnect:
+        await notification_ws_manager.disconnect(user_id, websocket)
+    except Exception:
+        await notification_ws_manager.disconnect(user_id, websocket)
 
 
 @router.get("/", response_model=ApiResponse[List[NotificationResponse]])

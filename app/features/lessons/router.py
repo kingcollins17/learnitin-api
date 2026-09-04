@@ -7,6 +7,7 @@ from fastapi import (
     status,
     HTTPException,
     Query,
+    Path,
     Body,
     BackgroundTasks,
 )
@@ -22,6 +23,7 @@ from app.common.dependencies import (
     get_module_repository,
     get_credit_service,
     get_streak_service,
+    get_lesson_generation_tracker_service,
 )
 from app.features.streaks.service import StreakService
 from app.features.notifications.service import NotificationService
@@ -36,6 +38,7 @@ from app.features.subscriptions.dependencies import (
 from app.features.subscriptions.service import SubscriptionService
 from app.features.subscriptions.usage_service import SubscriptionUsageService
 from app.features.subscriptions.models import Subscription, SubscriptionResourceType
+from app.features.lessons.models import GenerationType
 from app.features.lessons.schemas import (
     LessonResponse,
     LessonDetailResponse,
@@ -50,8 +53,12 @@ from app.features.lessons.schemas import (
     StartLessonResponse,
     CompleteLessonResponse,
     TrackedLessonsResponse,
+    LessonGenerationStateResponse,
 )
 from app.features.lessons.service import LessonService, UserLessonService
+from app.features.lessons.generation_tracker_service import (
+    LessonGenerationTrackerService,
+)
 from app.features.credits.service import CreditService
 
 
@@ -59,8 +66,6 @@ from app.features.lessons.tasks import (
     generate_audio_background,
     generate_lesson_content_background,
 )
-from app.features.lessons.lesson_audio_tracker import audio_tracker
-from app.features.lessons.lesson_content_tracker import content_tracker
 from app.common.events.bus import event_bus
 from app.common.events import CourseCompletedEvent
 
@@ -134,6 +139,9 @@ async def get_lessons(
 async def get_tracked_lessons(
     _admin: User = Depends(get_active_admin),
     service: LessonService = Depends(get_lesson_service),
+    tracker_service: LessonGenerationTrackerService = Depends(
+        get_lesson_generation_tracker_service
+    ),
 ):
     """
     Get all lessons currently undergoing audio or content generation.
@@ -141,8 +149,10 @@ async def get_tracked_lessons(
     **Authentication required.**
     """
     try:
-        audio_ids = list(audio_tracker.get_tracked_lessons().keys())
-        content_ids = list(content_tracker.get_tracked_lessons().keys())
+        audio_tracked_dict = await tracker_service.get_tracked_lessons(GenerationType.AUDIO)
+        content_tracked_dict = await tracker_service.get_tracked_lessons(GenerationType.CONTENT)
+        audio_ids = list(audio_tracked_dict.keys())
+        content_ids = list(content_tracked_dict.keys())
 
         audio_lessons = await service.get_lessons_by_ids(audio_ids)
         content_lessons = await service.get_lessons_by_ids(content_ids)
@@ -164,6 +174,49 @@ async def get_tracked_lessons(
 
 
 
+@router.get(
+    "/{lesson_id}/generation-states",
+    response_model=ApiResponse[List[LessonGenerationStateResponse]],
+)
+async def get_lesson_generation_states(
+    lesson_id: int = Path(..., description="ID of the lesson"),
+    generation_type: Optional[GenerationType] = Query(
+        None, description="Filter by generation type ('content' or 'audio')"
+    ),
+    statuses: Optional[List[str]] = Query(
+        None, description="Filter by generation status ('pending', 'in_progress', 'completed', 'failed')"
+    ),
+    tracker_service: LessonGenerationTrackerService = Depends(
+        get_lesson_generation_tracker_service
+    ),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Fetch generation states for a specific lesson.
+
+    **Authentication required.**
+    """
+    try:
+        states = await tracker_service.get_generation_states_by_lesson_id(
+            lesson_id=lesson_id,
+            generation_type=generation_type,
+            statuses=statuses,
+        )
+        response_data = [
+            LessonGenerationStateResponse.model_validate(state) for state in states
+        ]
+        return success_response(
+            data=response_data,
+            details=f"Retrieved {len(response_data)} generation state(s)",
+        )
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch generation states: {str(e)}",
+        )
+
+
 @router.get("/{lesson_id}", response_model=ApiResponse[LessonDetailResponse])
 async def get_lesson(
     lesson_id: int,
@@ -173,6 +226,9 @@ async def get_lesson(
     notification_service: NotificationService = Depends(get_notification_service),
     current_user: User = Depends(get_current_active_user),
     credit_service: CreditService = Depends(get_credit_service),
+    tracker_service: LessonGenerationTrackerService = Depends(
+        get_lesson_generation_tracker_service
+    ),
 ):
     """
     Get a specific lesson by ID.
@@ -204,7 +260,13 @@ async def get_lesson(
 
         # Trigger background generation if content is missing
         if not lesson.content:
-            if content_tracker.start_tracking(lesson_id, current_user.id):
+            started, _ = await tracker_service.start_tracking(
+                user_id=current_user.id,
+                lesson_id=lesson_id,
+                generation_type=GenerationType.CONTENT,
+            )
+            if started:
+                await service.repository.session.commit()
                 background_tasks.add_task(
                     generate_lesson_content_background,
                     lesson_id=lesson_id,
@@ -279,9 +341,13 @@ async def start_lesson(
     user_lesson_service: UserLessonService = Depends(get_user_lesson_service),
     notification_service: NotificationService = Depends(get_notification_service),
     streak_service: StreakService = Depends(get_streak_service),
+    session=Depends(get_async_session),
     current_user: User = Depends(get_current_active_user),
     _credits: User = Depends(HasSufficientLessonCredits("content")),
     credit_service: CreditService = Depends(get_credit_service),
+    tracker_service: LessonGenerationTrackerService = Depends(
+        get_lesson_generation_tracker_service
+    ),
 ):
     """
     Start a lesson (create user lesson progress record).
@@ -338,7 +404,12 @@ async def start_lesson(
         if not lesson.content:
             is_content_available = False
             # Trigger background generation if not already in progress
-            if content_tracker.start_tracking(lesson_id, current_user.id):
+            started, _ = await tracker_service.start_tracking(
+                user_id=current_user.id,
+                lesson_id=lesson_id,
+                generation_type=GenerationType.CONTENT,
+            )
+            if started:
                 background_tasks.add_task(
                     generate_lesson_content_background,
                     lesson_id=lesson_id,
@@ -553,6 +624,9 @@ async def unlock_audio(
     current_user: User = Depends(get_current_active_user),
     _credits: User = Depends(HasSufficientLessonCredits("audio")),
     credit_service: CreditService = Depends(get_credit_service),
+    tracker_service: LessonGenerationTrackerService = Depends(
+        get_lesson_generation_tracker_service
+    ),
 ):
     """
     Unlock audio for a lesson.
@@ -595,7 +669,14 @@ async def unlock_audio(
                 )
 
             # Trigger background generation if not already in progress
-            if audio_tracker.start_tracking(lesson_id, current_user.id):
+            started, _ = await tracker_service.start_tracking(
+                user_id=current_user.id,
+                lesson_id=lesson_id,
+                generation_type=GenerationType.AUDIO,
+                provider=provider,
+            )
+            if started:
+                await lesson_service.repository.session.commit()
                 background_tasks.add_task(
                     generate_audio_background,
                     lesson_id=lesson_id,
@@ -785,6 +866,9 @@ async def get_lesson_audios(
     service: LessonService = Depends(get_lesson_service),
     current_user: User = Depends(get_current_active_user),
     credit_service: CreditService = Depends(get_credit_service),
+    tracker_service: LessonGenerationTrackerService = Depends(
+        get_lesson_generation_tracker_service
+    ),
 ):
     """
     Get all audio segments for a lesson.
@@ -804,10 +888,15 @@ async def get_lesson_audios(
         message = f"Retrieved {len(audios)} audio segment(s)"
 
         if not audios:
-            if not audio_tracker.is_in_progress(lesson_id):
+            if not await tracker_service.is_in_progress(generation_type=GenerationType.AUDIO, lesson_id=lesson_id):
                 lesson = await service.get_lesson_by_id(lesson_id)
                 if lesson and lesson.content:
-                    if audio_tracker.start_tracking(lesson_id, current_user.id):
+                    started, _ = await tracker_service.start_tracking(
+                        user_id=current_user.id,
+                        lesson_id=lesson_id,
+                        generation_type=GenerationType.AUDIO,
+                    )
+                    if started:
                         background_tasks.add_task(
                             generate_audio_background,
                             lesson_id=lesson_id,

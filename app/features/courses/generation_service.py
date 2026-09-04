@@ -65,7 +65,7 @@ For each course you design:
 - You must structure the course into exactly {weeks} modules (one module for each week of the requested course duration).
 - You must assign a `credit_cost`, `audio_credit_cost`, and `quiz_credit_cost` to every lesson in each module according to these pricing rules:
   * Free Lessons: {free_lessons_rule}
-  * Paid Lessons (all other lessons): `credit_cost` must be between 20 to 25 credits depending on the complexity of the lesson, `audio_credit_cost` must be between 25 to 30 credits depending on course/lesson complexity, and `quiz_credit_cost` must be between 15 to 20 credits depending on complexity.
+  * Paid Lessons (all other lessons): `credit_cost` must be between 50 to 100 credits depending on the complexity of the lesson, `audio_credit_cost` must be between 70 to 100 credits depending on course/lesson complexity, and `quiz_credit_cost` must be between 35 to 50 credits depending on complexity.
 - Break down complex topics into logical, progressive modules
 - Ensure each module builds upon previous knowledge
 - Create specific, actionable learning objectives for each lesson
@@ -96,13 +96,13 @@ Please generate 1-2 course options that cover this topic effectively. Each cours
 - Every lesson must have:
   * Specific learning objectives
   * Duration estimates
-  * A `credit_cost` (0 if free, 20-25 if paid)
-  * An `audio_credit_cost` (0 if free, 25-30 if paid)
-  * A `quiz_credit_cost` (0 if free, 15-20 if paid)
+  * A `credit_cost` (0 if free, 50-65 if paid)
+  * An `audio_credit_cost` (0 if free, 70-100 if paid)
+  * A `quiz_credit_cost` (0 if free, 35-50 if paid)
 
 Pricing Guidelines for Lessons:
 - {free_lessons_rule}
-- For all other lessons, assign a `credit_cost` between 20 and 25 credits based on lesson complexity, an `audio_credit_cost` between 25 and 30 credits, and a `quiz_credit_cost` between 15 and 20 credits.
+- For all other lessons, assign a `credit_cost` between 50 and 65 credits based on lesson complexity, an `audio_credit_cost` between 70 and 100 credits, and a `quiz_credit_cost` between 35 and 50 credits.
 
 Make the courses practical, engaging, and suitable for {request.level} learners."""
 

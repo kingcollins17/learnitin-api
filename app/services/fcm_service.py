@@ -37,7 +37,16 @@ class FirebaseFCMService:
                             self.settings.FIREBASE_CREDENTIALS_JSON
                         )
                     else:
-                        cred_info = json.loads(self.settings.FIREBASE_CREDENTIALS_JSON.replace('\n', '\\n'))
+                        raw_json = self.settings.FIREBASE_CREDENTIALS_JSON
+                        try:
+                            cred_info = json.loads(raw_json, strict=False)
+                        except Exception:
+                            cleaned = raw_json.replace('\n', '\\n').replace('\r', '\\r')
+                            cred_info = json.loads(cleaned, strict=False)
+
+                        if isinstance(cred_info, dict) and "private_key" in cred_info:
+                            cred_info["private_key"] = cred_info["private_key"].replace("\\n", "\n")
+
                         cred = credentials.Certificate(cred_info)
 
                     firebase_admin.initialize_app(cred, options)

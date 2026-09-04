@@ -5,9 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.features.users.models import User
 from app.features.courses.models import Course
 from app.features.modules.models import Module
-from app.features.lessons.models import Lesson
-from app.features.lessons.lesson_audio_tracker import audio_tracker
-from app.features.lessons.lesson_content_tracker import content_tracker
+from app.features.lessons.models import Lesson, GenerationType
+from app.features.lessons.generation_tracker_service import (
+    LessonGenerationTrackerService,
+)
 
 
 @pytest.mark.asyncio
@@ -15,10 +16,6 @@ async def test_get_tracked_lessons_endpoint(
     client: AsyncClient, db_session: AsyncSession, auth_headers: dict
 ):
     """Test that /lessons/tracked returns active tracked items as detailed Lesson objects."""
-    # Reset trackers before the test
-    audio_tracker._in_progress.clear()
-    content_tracker._in_progress.clear()
-
     # 1. Get current test user and make them an admin/superuser
     username = "testuser"
     result = await db_session.execute(select(User).where(User.username == username))
@@ -65,8 +62,14 @@ async def test_get_tracked_lessons_endpoint(
     assert data["data"]["content_generation"] == []
 
     # Start tracking the created lessons
-    audio_tracker.start_tracking(lesson_id=lesson_audio.id, user_id=user.id)
-    content_tracker.start_tracking(lesson_id=lesson_content.id, user_id=user.id)
+    tracker_service = LessonGenerationTrackerService(db_session)
+    await tracker_service.start_tracking(
+        user_id=user.id, lesson_id=lesson_audio.id, generation_type=GenerationType.AUDIO
+    )
+    await tracker_service.start_tracking(
+        user_id=user.id, lesson_id=lesson_content.id, generation_type=GenerationType.CONTENT
+    )
+    await db_session.commit()
 
     # Verify endpoint returns the tracked lessons from database with full details
     response = await client.get("/api/v1/lessons/tracked", headers=auth_headers)
@@ -86,8 +89,13 @@ async def test_get_tracked_lessons_endpoint(
     assert content_gen_list[0]["title"] == "Lesson Generating Content"
 
     # Stop tracking
-    audio_tracker.stop_tracking(lesson_id=lesson_audio.id)
-    content_tracker.stop_tracking(lesson_id=lesson_content.id)
+    await tracker_service.complete_tracking(
+        generation_type=GenerationType.AUDIO, lesson_id=lesson_audio.id
+    )
+    await tracker_service.complete_tracking(
+        generation_type=GenerationType.CONTENT, lesson_id=lesson_content.id
+    )
+    await db_session.commit()
 
     # Verify they are cleared
     response = await client.get("/api/v1/lessons/tracked", headers=auth_headers)
@@ -95,3 +103,4 @@ async def test_get_tracked_lessons_endpoint(
     data = response.json()
     assert data["data"]["audio_generation"] == []
     assert data["data"]["content_generation"] == []
+
