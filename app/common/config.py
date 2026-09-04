@@ -11,11 +11,15 @@ class Settings(BaseSettings):
     # Application
     APP_NAME: str = Field(default="LearnItIn API")
     APP_VERSION: str = Field(default="1.0.0")
+    ENVIRONMENT: str = Field(
+        default="staging",
+        description="Application environment: 'production', 'staging', or 'development'",
+    )
     DEBUG: bool = Field(default=True)
     API_V1_PREFIX: str = Field(default="/api/v1")
 
     # Security
-    SECRET_KEY: str = Field(default="your-secret-key-change-in-production")
+    SECRET_KEY: str = Field()
     ALGORITHM: str = Field(default="HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=43200)
 
@@ -63,6 +67,23 @@ class Settings(BaseSettings):
     FIREBASE_STORAGE_BUCKET: str = Field(default="")
     FIREBASE_CREDENTIALS_JSON: str = Field(default="")
 
+    # Storage Provider Configuration
+    STORAGE_PROVIDER: str = Field(
+        default="firebase",
+        description="Storage provider to use: 'firebase', 'r2', or 'gdrive'",
+    )
+    R2_ACCOUNT_ID: str = Field(default="")
+    R2_ACCESS_KEY_ID: str = Field(default="")
+    R2_SECRET_ACCESS_KEY: str = Field(default="")
+    R2_BUCKET_NAME: str = Field(default="")
+    R2_PUBLIC_DOMAIN: str = Field(default="")
+
+    R2_JURISDICTION: str=Field(default='default')
+
+    # Google Drive Storage Configuration
+    GOOGLE_DRIVE_CREDENTIALS_JSON: str = Field(default="")
+    GOOGLE_DRIVE_FOLDER_ID: str = Field(default="")
+
     # Google Play
     GOOGLE_PLAY_PACKAGE_NAME: str = Field(default="com.learnitin.learnitin")
     GOOGLE_PLAY_MOCK: bool = Field(default=False)
@@ -75,8 +96,10 @@ class Settings(BaseSettings):
     STREAK_7_DAY_BONUS: int = Field(default=60)
     COURSE_GENERATION_COST: int = Field(default=10)
 
-    #STORAGE AVAILABLE
-    STORAGE_AVAILABLE: bool = Field(default=False, description="Whether the app storage service is back online")
+    # STORAGE AVAILABLE
+    STORAGE_AVAILABLE: bool = Field(
+        default=False, description="Whether the app storage service is back online"
+    )
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = Field(
         default=[

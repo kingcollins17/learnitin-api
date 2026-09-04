@@ -101,9 +101,9 @@ class TestCourseService:
                                 title="Introduction to Pandas",
                                 objectives=["Learn DataFrame basics"],
                                 duration="3 hours",
-                                credit_cost=20,
-                                audio_credit_cost=25,
-                                quiz_credit_cost=15,
+                                credit_cost=50,
+                                audio_credit_cost=75,
+                                quiz_credit_cost=35,
                             )
                         ]
                     )

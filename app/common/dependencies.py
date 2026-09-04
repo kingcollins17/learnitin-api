@@ -4,7 +4,12 @@ from typing import Optional
 from app.services.audio_generation_service import AudioGenerationService
 from app.services.audio_conversion_service import AudioConversionService
 from app.services.deepgram_audio_service import DeepgramAudioService
-from app.services.storage_service import FirebaseStorageService
+from app.services.storage_service import (
+    StorageService,
+    FirebaseStorageService,
+    CloudFlareStorageService,
+    GoogleDriveStorageService,
+)
 from app.services.email_service import EmailService
 from app.services.image_generation_service import ImageGenerationService
 from app.services.fcm_service import FirebaseFCMService
@@ -36,6 +41,9 @@ from app.features.courses.service import (
 )
 from app.features.courses.generation_service import CourseGenerationService
 from app.features.lessons.generation_service import LessonGenerationService
+from app.features.lessons.generation_tracker_service import (
+    LessonGenerationTrackerService,
+)
 from app.features.quiz.generation_service import QuizGenerationService
 from app.features.lessons.lecture_service import (
     LectureConversionService,
@@ -224,6 +232,12 @@ def get_lesson_generation_service(
     return LessonGenerationService(ai_service)
 
 
+def get_lesson_generation_tracker_service(
+    session: AsyncSession = Depends(get_async_session),
+) -> LessonGenerationTrackerService:
+    return LessonGenerationTrackerService(session)
+
+
 def get_quiz_generation_service(
     ai_service: LangChainService = Depends(get_langchain_service),
 ) -> QuizGenerationService:
@@ -242,10 +256,30 @@ def get_google_play_service() -> GooglePlayService:
 
 
 _firebase_storage_service = FirebaseStorageService(_settings)
+_cloudflare_storage_service = CloudFlareStorageService(_settings)
+_google_drive_storage_service = GoogleDriveStorageService(_settings)
+
+
+def get_storage_service() -> StorageService:
+    """Returns the storage service implementation configured in settings (Firebase, R2, or Google Drive)."""
+    provider = (_settings.STORAGE_PROVIDER or "firebase").lower()
+    if provider in ("r2", "cloudflare"):
+        return _cloudflare_storage_service
+    elif provider in ("gdrive", "googledrive", "google_drive"):
+        return _google_drive_storage_service
+    return _firebase_storage_service
 
 
 def get_firebase_storage_service() -> FirebaseStorageService:
     return _firebase_storage_service
+
+
+def get_cloudflare_storage_service() -> CloudFlareStorageService:
+    return _cloudflare_storage_service
+
+
+def get_google_drive_storage_service() -> GoogleDriveStorageService:
+    return _google_drive_storage_service
 
 
 _audio_conversion_service = AudioConversionService()
@@ -317,7 +351,7 @@ def get_review_service(
 
 def get_category_service(
     category_repo: CategoryRepository = Depends(get_category_repository),
-    storage_service: FirebaseStorageService = Depends(get_firebase_storage_service),
+    storage_service: StorageService = Depends(get_storage_service),
 ) -> CategoryService:
     return CategoryService(category_repo, storage_service)
 
@@ -325,7 +359,7 @@ def get_category_service(
 def get_subcategory_service(
     subcategory_repo: SubCategoryRepository = Depends(get_subcategory_repository),
     category_repo: CategoryRepository = Depends(get_category_repository),
-    storage_service: FirebaseStorageService = Depends(get_firebase_storage_service),
+    storage_service: StorageService = Depends(get_storage_service),
 ) -> SubCategoryService:
     return SubCategoryService(subcategory_repo, category_repo, storage_service)
 
@@ -345,7 +379,7 @@ def get_course_service(
     review_repo: ReviewRepository = Depends(get_review_repository),
     category_repo: CategoryRepository = Depends(get_category_repository),
     subcategory_repo: SubCategoryRepository = Depends(get_subcategory_repository),
-    storage_service: FirebaseStorageService = Depends(get_firebase_storage_service),
+    storage_service: StorageService = Depends(get_storage_service),
     image_gen_service: ImageGenerationService = Depends(get_image_generation_service),
 ) -> CourseService:
     return CourseService(
@@ -393,7 +427,7 @@ def get_lesson_service(
         get_lesson_generation_service
     ),
     lecture_service: LectureConversionService = Depends(get_lecture_conversion_service),
-    storage_service: FirebaseStorageService = Depends(get_firebase_storage_service),
+    storage_service: StorageService = Depends(get_storage_service),
     audio_gen_service: AudioGenerationService = Depends(get_audio_generation_service),
     deepgram_audio_service: DeepgramAudioService = Depends(get_deepgram_audio_service),
     audio_conversion_service: AudioConversionService = Depends(
@@ -464,7 +498,7 @@ def get_subscription_usage_service(
 
 
 def get_db_maintenance_service(
-    storage_service: FirebaseStorageService = Depends(get_firebase_storage_service),
+    storage_service: StorageService = Depends(get_storage_service),
     audio_repo: LessonAudioRepository = Depends(get_lesson_audio_repo),
     course_repo: CourseRepository = Depends(get_course_repository),
 ) -> DBMaintenanceService:
@@ -506,7 +540,7 @@ def get_admin_service(
     course_repo: CourseRepository = Depends(get_course_repository),
     lesson_repo: LessonRepository = Depends(get_lesson_repository),
     audio_repo: LessonAudioRepository = Depends(get_lesson_audio_repo),
-    storage_service: FirebaseStorageService = Depends(get_firebase_storage_service),
+    storage_service: StorageService = Depends(get_storage_service),
     maintenance_service: DBMaintenanceService = Depends(get_db_maintenance_service),
 ) -> AdminService:
     """Dependency for admin service."""

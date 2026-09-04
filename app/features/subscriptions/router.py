@@ -84,37 +84,6 @@ async def _handle_credit_purchase(
         details="Credits purchase verified successfully"
     )
 
-async def _handle_subscription_purchase(
-    request: SubscriptionVerifyRequest,
-    user_id: int,
-    service: SubscriptionService,
-    credit_service: CreditService,
-    usage_service: SubscriptionUsageService,
-) -> ApiResponse:
-    subscription = await service.verify_and_save(user_id, request)
-    
-    try:
-        await credit_service.add_credits(
-            user_id=user_id,
-            amount=settings.PREMIUM_SUBSCRIPTION_CREDITS,
-            transaction_type=CreditTransactionType.BONUS,
-            description=f"Subscription bonus credits",
-            idempotency_key=f"sub_bonus_{request.purchase_token}"
-        )
-        await credit_service.commit_all()
-    except Exception as e:
-        logger.warning(f"Failed to add subscription bonus credits: {e}")
-        
-    # Attach usage
-    assert subscription.id is not None
-    usage = await usage_service.get_usage(subscription.id)
-    subscription_resp = SubscriptionResponse.model_validate(subscription)
-    # subscription_resp.usage = usage
-
-    return success_response(
-        data=subscription_resp, details="Subscription verified successfully"
-    )
-
 async def _process_subscription_notification(
     sub_notification,
     package_name: str,
@@ -213,32 +182,6 @@ async def get_my_subscription(
     )
 
 
-@router.get("/plans/free/limits", response_model=ApiResponse[FreePlanLimitsResponse])
-async def get_free_plan_limits(
-    service: SubscriptionService = Depends(get_subscription_service),
-):
-    """
-    Get the monthly usage limits for the free plan.
-    """
-    limits = await service.get_free_plan_limits()
-    return success_response(data=limits, details="Free plan limits retrieved")
-
-
-@router.get("/plans/premium/limits", response_model=ApiResponse[PremiumPlanLimitsResponse])
-async def get_premium_plan_limits():
-    """
-    Get the premium plan limits/entitlements. 
-    ```{
-  "status_code": 200,
-  "details": "Premium plan limits retrieved",
-  "data": {
-    "bonus_credits": 800
-  }
-}```
-    """
-    limits = PremiumPlanLimitsResponse(bonus_credits=settings.PREMIUM_SUBSCRIPTION_CREDITS)
-    return success_response(data=limits, details="Premium plan limits retrieved")
-
 
 @router.post("/verify", response_model=ApiResponse)
 async def verify_purchase(
@@ -256,7 +199,6 @@ async def verify_purchase(
     try:
         if request.product_id.endswith("_credits"):
             return await _handle_credit_purchase(request, current_user.id, service, credit_service)
-        return await _handle_subscription_purchase(request, current_user.id, service, credit_service, usage_service)
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

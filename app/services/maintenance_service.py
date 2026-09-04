@@ -5,7 +5,7 @@ from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.features.lessons.repository import LessonAudioRepository
 from app.features.courses.repository import CourseRepository
-from app.services.storage_service import FirebaseStorageService
+from app.services.storage_service import StorageService
 from app.common.service import Commitable
 
 logger = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ class DBMaintenanceService(Commitable):
         self,
         audio_repo: LessonAudioRepository,
         course_repo: CourseRepository,
-        storage_service: FirebaseStorageService,
+        storage_service: StorageService,
     ):
 
         self.audio_repo = audio_repo

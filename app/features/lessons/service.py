@@ -19,7 +19,7 @@ from app.features.courses.repository import CourseRepository, UserCourseReposito
 from app.features.lessons.lecture_service import LectureConversionService
 from app.services.audio_generation_service import AudioGenerationService
 from app.services.deepgram_audio_service import DeepgramAudioService
-from app.services.storage_service import FirebaseStorageService
+from app.services.storage_service import StorageService
 from app.features.subscriptions.models import Subscription, SubscriptionResourceType
 from app.features.subscriptions.usage_service import SubscriptionUsageService
 from app.services.audio_conversion_service import AudioConversionService
@@ -47,7 +47,7 @@ class LessonService(Commitable):
         lecture_service: LectureConversionService,
         audio_gen_service: AudioGenerationService,
         deepgram_audio_service: DeepgramAudioService,
-        storage_service: FirebaseStorageService,
+        storage_service: StorageService,
         audio_conversion_service: AudioConversionService,
         settings: Settings,
     ):
@@ -172,11 +172,11 @@ class LessonService(Commitable):
                         f"Generated audio for part {part.order} ('{part.title}') is invalid, empty or corrupted."
                     )
 
-                # Upload to Firebase (run in thread since it is a synchronous blocking call)
+                # Upload to storage (run in thread since it is a synchronous blocking call)
                 audio_url = await asyncio.to_thread(
                     self.storage_service.upload_audio,
                     audio_data=audio_bytes,
-                    folder=f"lesson_audio/{lesson_id}",
+                    folder=f"Audio/lesson_audio/{lesson_id}",
                 )
 
                 return LessonAudio(

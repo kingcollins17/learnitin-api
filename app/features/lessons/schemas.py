@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Dict
 from datetime import datetime
 from app.features.courses.models import ProgressStatus
+from app.features.lessons.models import GenerationType, GenerationStatus
 
 
 class LessonAudioResponse(BaseModel):
@@ -92,6 +93,7 @@ class LessonResponse(LessonBase):
                 import json
 
                 return json.loads(v)
+            # pyrefly: ignore [unbound-name]
             except json.JSONDecodeError:
                 return []
         return v
@@ -216,5 +218,26 @@ class TrackedLessonsResponse(BaseModel):
         default_factory=list,
         description="List of lessons with content generation in progress",
     )
+
+
+class LessonGenerationStateResponse(BaseModel):
+    """Schema for lesson generation state responses."""
+
+    id: Optional[int]=None
+    user_id: Optional[int]=None
+    lesson_id: Optional[int] = None
+    generation_type: Optional[GenerationType]=None
+    status: Optional[GenerationStatus]=None
+    provider: Optional[str] = None
+    task_id: Optional[str] = None
+    error_message: Optional[str] = None
+    metadata_json: Optional[str] = None
+    started_at: Optional[datetime]=None
+    completed_at: Optional[datetime] = None
+    created_at: Optional[datetime]=None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
 
 

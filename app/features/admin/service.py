@@ -26,7 +26,7 @@ from app.features.subscriptions.usage_service import SubscriptionUsageService
 from app.features.notifications.service import NotificationService
 from app.features.notifications.schemas import NotificationCreate
 from app.features.notifications.models import NotificationType
-from app.services.storage_service import FirebaseStorageService
+from app.services.storage_service import StorageService
 from app.services.maintenance_service import DBMaintenanceService
 from app.features.admin.schemas import AdminUserListResponse, AdminStatsResponse
 
@@ -49,7 +49,7 @@ class AdminService(Commitable):
         course_repository: CourseRepository,
         lesson_repository: LessonRepository,
         lesson_audio_repository: LessonAudioRepository,
-        storage_service: FirebaseStorageService,
+        storage_service: StorageService,
         maintenance_service: DBMaintenanceService,
     ):
         self.user_repository = user_repository

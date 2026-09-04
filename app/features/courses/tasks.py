@@ -13,7 +13,7 @@ from app.features.modules.repository import ModuleRepository
 from app.features.lessons.repository import LessonRepository
 from app.features.reviews.repository import ReviewRepository
 from app.common.config import settings
-from app.common.dependencies import get_firebase_storage_service, get_image_generation_service
+from app.common.dependencies import get_storage_service, get_image_generation_service
 from app.features.courses.service import CourseService
 
 
@@ -27,7 +27,7 @@ def _get_course_service(session: AsyncSession) -> CourseService:
         review_repository=ReviewRepository(session),
         category_repository=CategoryRepository(session),
         subcategory_repository=SubCategoryRepository(session),
-        storage_service=get_firebase_storage_service(),
+        storage_service=get_storage_service(),
         image_gen_service=get_image_generation_service(),
     )
 

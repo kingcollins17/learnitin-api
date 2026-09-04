@@ -20,6 +20,7 @@ from app.features.credits.router import router as credits_router
 from app.features.app_configs.router import router as app_configs_router
 from app.features.streaks.router import router as streaks_router
 from app.features.notifications.handlers import handle_in_app_push_for_fcm, handle_multicast_push_for_fcm
+from app.features.notifications.ws_manager import notification_ws_manager
 from app.features.logs.handlers import handle_log_event
 from app.common.events import NotificationInAppPushEvent, NotificationMulticastPushEvent, LogEvent
 
@@ -34,10 +35,16 @@ async def lifespan(app: FastAPI):
     event_bus.on(
         NotificationInAppPushEvent, handle_in_app_push_for_fcm
     )  # ty:ignore[no-matching-overload]
+    event_bus.on(
+        NotificationInAppPushEvent, notification_ws_manager.handle_in_app_push_event
+    )  # type: ignore
 
     # Register multicast notification handler (for admin broadcast/bulk)
     event_bus.on(
         NotificationMulticastPushEvent, handle_multicast_push_for_fcm
+    )  # type: ignore
+    event_bus.on(
+        NotificationMulticastPushEvent, notification_ws_manager.handle_multicast_push_event
     )  # type: ignore
 
     # Register log event handler

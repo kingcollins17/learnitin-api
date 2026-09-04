@@ -15,8 +15,8 @@ from app.common.events import (
 )
 
 
-from app.features.lessons.lesson_audio_tracker import audio_tracker
-from app.features.lessons.lesson_content_tracker import content_tracker
+from app.features.lessons.generation_tracker_service import LessonGenerationTrackerService
+from app.features.lessons.models import GenerationType
 from app.features.notifications.service import NotificationService
 from app.features.notifications.schemas import NotificationCreate
 from app.features.notifications.models import NotificationType
@@ -91,6 +91,14 @@ async def generate_audio_background(
             f"Audio generation completed for lesson {lesson_id}: {len(created_audios)} parts created"
         )
 
+        # Mark audio generation completed in DB
+        tracker_service = LessonGenerationTrackerService(lesson_service.repository.session)
+        await tracker_service.complete_tracking(
+            generation_type=GenerationType.AUDIO,
+            lesson_id=lesson_id,
+        )
+        await lesson_service.repository.session.commit()
+
         # Publish completion events
         if user_id:
             # 1. Dispatch AudioReadyEvent, no handler listening, comment out for now
@@ -120,6 +128,14 @@ async def generate_audio_background(
         error_msg = f"Failed to generate audio for lesson {lesson_id}: {str(e)}"
         print(error_msg)
 
+        tracker_service = LessonGenerationTrackerService(lesson_service.repository.session)
+        await tracker_service.fail_tracking(
+            generation_type=GenerationType.AUDIO,
+            lesson_id=lesson_id,
+            error_message=error_msg,
+        )
+        await lesson_service.repository.session.commit()
+
         # Publish failure event
         if user_id:
             if user_lesson_service and refund_on_error:
@@ -144,9 +160,6 @@ async def generate_audio_background(
                 },
             )
         )
-    finally:
-        # Stop tracking so new generation can be requested if needed
-        audio_tracker.stop_tracking(lesson_id)
 
 
 async def generate_lesson_content_background(
@@ -227,10 +240,22 @@ async def generate_lesson_content_background(
                 },
             )
         )
+        # Mark content generation completed in DB
+        tracker_service = LessonGenerationTrackerService(lesson_service.repository.session)
+        await tracker_service.complete_tracking(
+            generation_type=GenerationType.CONTENT,
+            lesson_id=lesson_id,
+        )
+        await lesson_service.repository.session.commit()
 
     except Exception as e:
         traceback.print_exc()
-        print(f"Failed to generate content for lesson {lesson_id}: {str(e)}")
-    finally:
-        # Stop tracking
-        content_tracker.stop_tracking(lesson_id)
+        error_msg = f"Failed to generate content for lesson {lesson_id}: {str(e)}"
+        print(error_msg)
+        tracker_service = LessonGenerationTrackerService(lesson_service.repository.session)
+        await tracker_service.fail_tracking(
+            generation_type=GenerationType.CONTENT,
+            lesson_id=lesson_id,
+            error_message=error_msg,
+        )
+        await lesson_service.repository.session.commit()
