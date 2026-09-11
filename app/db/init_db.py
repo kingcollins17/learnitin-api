@@ -1,5 +1,5 @@
 from app.db.session import engine, Base
-from app.models.user import User  # Import all models here
+# from app.models.user import User  # Import all models here
 
 def init_db():
     """Initialize database tables."""
