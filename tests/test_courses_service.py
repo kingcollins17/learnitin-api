@@ -170,3 +170,42 @@ class TestCourseService:
             assert expected_credit_range in system_prompt
             assert expected_audio_range in system_prompt
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "topic",
+        [
+            "Virtual Assistance",
+            "Social Media Management",
+            "Digital Marketing",
+            "Freelancing",
+            "Canva and Graphic Design",
+            "Excel",
+            "Data Analysis",
+            "AI for Beginners",
+        ],
+    )
+    async def test_generate_recommended_free_courses(self, service, topic):
+        """Test that recommended free courses include free course pricing instructions in prompts."""
+        request = CourseGenerationRequest(
+            topic=topic,
+            level="beginner",
+            duration_preference="4 weeks",
+        )
+
+        with patch.object(service.ai_service, 'invoke', new_callable=AsyncMock) as mock_invoke:
+            class MockResponse:
+                courses = []
+
+            mock_invoke.return_value = MockResponse()
+
+            await service.generate_courses(request)
+
+            call_kwargs = mock_invoke.call_args.kwargs
+            system_prompt = call_kwargs["system_prompt"]
+            user_prompt = call_kwargs["user_prompt"]
+
+            assert "recommended free courses" in system_prompt.lower()
+            assert "free for the most part" in system_prompt.lower()
+            assert "free for the most part" in user_prompt.lower()
+
+

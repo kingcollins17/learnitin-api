@@ -51,12 +51,38 @@ class CourseGenerationService:
                 weeks = int(match.group(1))
             except ValueError:
                 pass
-        # Define free lesson rules depending on course size
-        free_lessons_rule = (
-            "All lessons in the first module (Module 1) must be completely free (set `credit_cost`, `audio_credit_cost`, and `quiz_credit_cost` to 0)."
-            if weeks >= 4 else
-            "The first 3 lessons of the first module must be completely free (set `credit_cost`, `audio_credit_cost`, and `quiz_credit_cost` to 0)."
-        )
+        # Recommended free course topics
+        RECOMMENDED_FREE_COURSES = [
+            "Virtual Assistance",
+            "Social Media Management",
+            "Digital Marketing",
+            "Freelancing",
+            "Canva and Graphic Design",
+            "Excel",
+            "Data Analysis",
+            "AI for Beginners",
+        ]
+
+        topic_lower = request.topic.lower()
+        is_recommended_free = any(
+            kw.lower() in topic_lower or topic_lower in kw.lower()
+            for kw in RECOMMENDED_FREE_COURSES
+        ) or ("canva" in topic_lower) or ("graphic design" in topic_lower) or ("ai" in topic_lower and "beginner" in topic_lower)
+
+        # Define free lesson rules depending on topic and course size
+        if is_recommended_free:
+            free_lessons_rule = (
+                "This topic is in our recommended free courses list (Virtual Assistance, Social Media Management, Digital Marketing, Freelancing, Canva and Graphic Design, Excel, Data Analysis, AI for Beginners). "
+                "Make this course free for the most part: set `credit_cost`, `audio_credit_cost`, and `quiz_credit_cost` to 0 for all or almost all lessons across all modules."
+            )
+        elif weeks >= 4:
+            free_lessons_rule = (
+                "All lessons in the first module (Module 1) must be completely free (set `credit_cost`, `audio_credit_cost`, and `quiz_credit_cost` to 0)."
+            )
+        else:
+            free_lessons_rule = (
+                "The first 3 lessons of the first module must be completely free (set `credit_cost`, `audio_credit_cost`, and `quiz_credit_cost` to 0)."
+            )
 
         # Determine level-based credit costs (Beginner < Intermediate < Expert)
         level_val = (
@@ -90,7 +116,8 @@ Your task is to create comprehensive, well-structured course curricula that help
 For each course you design:
 - You must structure the course into exactly {weeks} modules (one module for each week of the requested course duration).
 - You must assign a `credit_cost`, `audio_credit_cost`, and `quiz_credit_cost` to every lesson in each module according to these pricing rules:
-  * Free Lessons: {free_lessons_rule}
+  * Free Lessons Guidelines: {free_lessons_rule}
+  * Recommended Free Courses: Recommended free courses to start with include: Virtual Assistance, Social Media Management, Digital Marketing, Freelancing, Canva and Graphic Design, Excel, Data Analysis, AI for Beginners. If the requested course topic belongs to these recommended free topics, make the course free for the most part by setting `credit_cost`, `audio_credit_cost`, and `quiz_credit_cost` to 0 for almost all or all lessons.
   * Level-Based Paid Lessons Pricing Tier Guidelines:
     - Beginner courses: lower cost (`credit_cost`: 30-50, `audio_credit_cost`: 40-60, `quiz_credit_cost`: 20-35 credits)
     - Intermediate courses: moderate cost (`credit_cost`: 50-75, `audio_credit_cost`: 70-100, `quiz_credit_cost`: 35-50 credits)
