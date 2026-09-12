@@ -3,6 +3,7 @@ import re
 from fastapi import HTTPException, status
 from typing import List, Union
 from pydantic import BaseModel
+from app.features.courses.models import CourseLevel
 from app.features.courses.schemas import (
     CourseGenerationRequest,
     CourseOutline,
@@ -57,6 +58,31 @@ class CourseGenerationService:
             "The first 3 lessons of the first module must be completely free (set `credit_cost`, `audio_credit_cost`, and `quiz_credit_cost` to 0)."
         )
 
+        # Determine level-based credit costs (Beginner < Intermediate < Expert)
+        level_val = (
+            request.level.value
+            if isinstance(request.level, CourseLevel)
+            else str(request.level)
+        ).lower()
+
+        if level_val == "beginner":
+            credit_range = "30-50"
+            audio_range = "40-60"
+            quiz_range = "20-35"
+        elif level_val == "expert":
+            credit_range = "80-120"
+            audio_range = "100-150"
+            quiz_range = "50-75"
+        else:  # intermediate or default
+            credit_range = "50-75"
+            audio_range = "70-100"
+            quiz_range = "35-50"
+
+        level_pricing_rule = (
+            f"For {request.level} level paid lessons: `credit_cost` must be {credit_range} credits based on lesson complexity, "
+            f"`audio_credit_cost` must be {audio_range} credits, and `quiz_credit_cost` must be {quiz_range} credits."
+        )
+
         # Build the system prompt
         system_prompt = f"""You are an expert curriculum designer and educational content creator.
 Your task is to create comprehensive, well-structured course curricula that help learners achieve their goals.
@@ -65,12 +91,16 @@ For each course you design:
 - You must structure the course into exactly {weeks} modules (one module for each week of the requested course duration).
 - You must assign a `credit_cost`, `audio_credit_cost`, and `quiz_credit_cost` to every lesson in each module according to these pricing rules:
   * Free Lessons: {free_lessons_rule}
-  * Paid Lessons (all other lessons): `credit_cost` must be between 50 to 100 credits depending on the complexity of the lesson, `audio_credit_cost` must be between 70 to 100 credits depending on course/lesson complexity, and `quiz_credit_cost` must be between 35 to 50 credits depending on complexity.
+  * Level-Based Paid Lessons Pricing Tier Guidelines:
+    - Beginner courses: lower cost (`credit_cost`: 30-50, `audio_credit_cost`: 40-60, `quiz_credit_cost`: 20-35 credits)
+    - Intermediate courses: moderate cost (`credit_cost`: 50-75, `audio_credit_cost`: 70-100, `quiz_credit_cost`: 35-50 credits)
+    - Expert courses: higher cost (`credit_cost`: 80-120, `audio_credit_cost`: 100-150, `quiz_credit_cost`: 50-75 credits)
+  * Target Level Pricing ({request.level}): {level_pricing_rule}
 - Break down complex topics into logical, progressive modules
 - Ensure each module builds upon previous knowledge
 - Create specific, actionable learning objectives for each lesson
 - Provide realistic time estimates for completion
-- Tailor the content to the specified difficulty level
+- Tailor the content to the specified difficulty level ({request.level})
 - Make the content engaging and practical
 
 Always structure your response as a list of courses, even if generating just one course."""
@@ -96,13 +126,13 @@ Please generate 1-2 course options that cover this topic effectively. Each cours
 - Every lesson must have:
   * Specific learning objectives
   * Duration estimates
-  * A `credit_cost` (0 if free, 50-65 if paid)
-  * An `audio_credit_cost` (0 if free, 70-100 if paid)
-  * A `quiz_credit_cost` (0 if free, 35-50 if paid)
+  * A `credit_cost` (0 if free, otherwise {credit_range} for paid lessons based on {request.level} difficulty)
+  * An `audio_credit_cost` (0 if free, otherwise {audio_range} for paid lessons based on {request.level} difficulty)
+  * A `quiz_credit_cost` (0 if free, otherwise {quiz_range} for paid lessons based on {request.level} difficulty)
 
 Pricing Guidelines for Lessons:
 - {free_lessons_rule}
-- For all other lessons, assign a `credit_cost` between 50 and 65 credits based on lesson complexity, an `audio_credit_cost` between 70 and 100 credits, and a `quiz_credit_cost` between 35 and 50 credits.
+- {level_pricing_rule}
 
 Make the courses practical, engaging, and suitable for {request.level} learners."""
 

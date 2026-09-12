@@ -133,3 +133,40 @@ class TestCourseService:
             user_prompt = call_kwargs["user_prompt"]
             assert "pandas" in user_prompt.lower()
             assert "visualization" in user_prompt.lower()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "level, expected_credit_range, expected_audio_range",
+        [
+            ("beginner", "30-50", "40-60"),
+            ("intermediate", "50-75", "70-100"),
+            ("expert", "80-120", "100-150"),
+        ],
+    )
+    async def test_generate_courses_level_credit_costs(
+        self, service, level, expected_credit_range, expected_audio_range
+    ):
+        """Test that credit costs in prompts scale according to course difficulty level."""
+        request = CourseGenerationRequest(
+            topic="Machine Learning",
+            level=level,
+            duration_preference="4 weeks",
+        )
+
+        with patch.object(service.ai_service, 'invoke', new_callable=AsyncMock) as mock_invoke:
+            class MockResponse:
+                courses = []
+
+            mock_invoke.return_value = MockResponse()
+
+            await service.generate_courses(request)
+
+            call_kwargs = mock_invoke.call_args.kwargs
+            system_prompt = call_kwargs["system_prompt"]
+            user_prompt = call_kwargs["user_prompt"]
+
+            assert expected_credit_range in user_prompt
+            assert expected_audio_range in user_prompt
+            assert expected_credit_range in system_prompt
+            assert expected_audio_range in system_prompt
+
